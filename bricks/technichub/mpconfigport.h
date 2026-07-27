@@ -3,7 +3,7 @@
 
 #include "stm32l431xx.h"
 
-#define MICROPY_HW_BOARD_NAME                   "LEGO Technic Hub"
+#define MICROPY_HW_BOARD_NAME                   "LEGO Technic Hub SBA Custom"
 #define MICROPY_HW_MCU_NAME                     "STM32L431RC"
 
 #define PYBRICKS_HUB_NAME                       "technichub"
