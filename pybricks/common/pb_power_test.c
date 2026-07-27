@@ -330,14 +330,6 @@ mp_obj_t pb_power_test_active(void) {
     return report;
 }
 
-static void pb_power_test_rtc_enable_backup_access(void) {
-    RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-    (void)RCC->APB1ENR1;
-    PWR->CR1 |= PWR_CR1_DBP;
-    while (!(PWR->CR1 & PWR_CR1_DBP)) {
-    }
-}
-
 #define PB_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
 #define PB_POWER_TEST_AUTOSTART_OFFSET (PBSYS_CONFIG_STORAGE_USER_DATA_SIZE - 8U)
 
@@ -433,7 +425,11 @@ void pb_power_test_supervisor_sleep(void) {
     pb_power_test_log_event(7, 0);
     pb_power_test_supervisor_sleep_pending = false;
     pb_power_test_log_event(8, 0);
-    pb_power_test_rtc_enable_backup_access();
+    RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+    (void)RCC->APB1ENR1;
+    PWR->CR1 |= PWR_CR1_DBP;
+    while (!(PWR->CR1 & PWR_CR1_DBP)) {
+    }
 
     RCC->CSR |= RCC_CSR_LSION;
     while (!(RCC->CSR & RCC_CSR_LSIRDY)) {
