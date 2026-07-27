@@ -38,7 +38,7 @@ typedef struct {
 #define PB_POWER_TEST_SAMPLE_MS 500U
 #define PB_POWER_TEST_ACTIVE_MS 10000U
 #define PB_POWER_TEST_ACTIVE_SAMPLE_MS 10U
-#define PB_POWER_TEST_STANDBY_SECONDS 30U
+#define PB_POWER_TEST_STANDBY_SECONDS 20U
 
 static volatile bool pb_power_test_idle_monitoring;
 static volatile uint32_t pb_power_test_idle_start_us;

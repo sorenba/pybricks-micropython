@@ -347,7 +347,7 @@ async def flash_ble(firmwares: bytes | dict[str, bytes], hub_kind: HubKind):
 
     if device is None:
         print("timed out", file=sys.stderr)
-        return
+        raise SystemExit(1)
 
     print("Found:", device)
 

@@ -11,6 +11,7 @@
 #include <pbdrv/reset.h>
 #include <pbdrv/usb.h>
 #include <pbio/main.h>
+#include <pbio/busy_count.h>
 #include <pbio/os.h>
 #include <pbio/port_interface.h>
 #include <pbio/protocol.h>
@@ -144,6 +145,13 @@ void pbsys_main(void) {
         pbsys_main_run_program_cleanup();
 
         if (pb_power_test_supervisor_sleep_requested()) {
+            // Program downloads are staged in RAM and normally persisted during
+            // shutdown. Save the current slot before the Stop 2 wake reset so
+            // the boot autostart path can load it from flash.
+            pbsys_storage_deinit();
+            while (pbio_busy_count_busy()) {
+                pbio_os_run_processes_and_wait_for_event();
+            }
             pb_power_test_supervisor_sleep();
         }
     }
