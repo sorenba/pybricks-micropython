@@ -2,7 +2,7 @@
 
 #include "stm32l4xx.h"
 
-#include "../../../../pybricks/common/pb_power_test.h"
+#include "../../../../pybricks/common/pb_power_test_hooks.h"
 
 typedef uint32_t pbio_os_irq_flags_t;
 
