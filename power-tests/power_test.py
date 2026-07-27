@@ -26,5 +26,5 @@ else:
     active_report = hub.system.power_test_active()
     print(active_report)
 
-    print("4. Entering 30-second Stop 2 + RTC test...")
+    print("4. Requesting supervisor-controlled 30-second Stop 2 + RTC test...")
     hub.system.power_test_standby()

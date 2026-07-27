@@ -15,6 +15,7 @@
 #include <pbdrv/clock.h>
 #include <pbsys/status.h>
 #include <pbsys/light.h>
+#include <pbsys/program_stop.h>
 
 #include <pbio/color.h>
 #include <pbio/light.h>
@@ -235,6 +236,7 @@ static void pb_power_test_rtc_enable_backup_access(void) {
 #define PB_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
 
 static bool pb_power_test_autostarted;
+static bool pb_power_test_supervisor_sleep_pending;
 
 bool pb_power_test_boot_autostart_check(void) {
     pb_power_test_rtc_enable_backup_access();
@@ -254,7 +256,21 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
     }
 }
 
-static void pb_power_test_enter_stop2_30_seconds(void) {
+bool pb_power_test_supervisor_sleep_requested(void) {
+    return pb_power_test_supervisor_sleep_pending;
+}
+
+void RTC_WKUP_IRQHandler(void) {
+    RTC->WPR = 0xCA;
+    RTC->WPR = 0x53;
+    RTC->ISR &= ~RTC_ISR_WUTF;
+    RTC->WPR = 0xFF;
+    EXTI->PR1 = EXTI_PR1_PIF20;
+    NVIC_SystemReset();
+}
+
+void pb_power_test_supervisor_sleep(void) {
+    pb_power_test_supervisor_sleep_pending = false;
     pb_power_test_rtc_enable_backup_access();
 
     RCC->CSR |= RCC_CSR_LSION;
@@ -286,8 +302,8 @@ static void pb_power_test_enter_stop2_30_seconds(void) {
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
     RTC->WPR = 0xFF;
 
-    EXTI->IMR1 &= ~EXTI_IMR1_IM20;
-    EXTI->EMR1 |= EXTI_EMR1_EM20;
+    EXTI->IMR1 |= EXTI_IMR1_IM20;
+    EXTI->EMR1 &= ~EXTI_EMR1_EM20;
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
     EXTI->PR1 = EXTI_PR1_PIF20;
 
@@ -296,15 +312,21 @@ static void pb_power_test_enter_stop2_30_seconds(void) {
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
     SysTick->CTRL = 0;
 
+    for (size_t i = 0; i < 8; i++) {
+        NVIC->ICER[i] = UINT32_MAX;
+        NVIC->ICPR[i] = UINT32_MAX;
+    }
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+    NVIC_SetPriority(RTC_WKUP_IRQn, 0);
+    NVIC_EnableIRQ(RTC_WKUP_IRQn);
+
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 
     __DSB();
     __ISB();
-    __SEV();
-    __WFE();
-    __WFE();
+    __WFI();
 
     NVIC_SystemReset();
     for (;;) {
@@ -328,7 +350,8 @@ mp_obj_t pb_power_test_standby_result(void) {
 
 mp_obj_t pb_power_test_standby(void) {
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
-    pb_power_test_enter_stop2_30_seconds();
+    pb_power_test_supervisor_sleep_pending = true;
+    pbsys_program_stop(false);
     return mp_const_none;
 }
 

@@ -142,6 +142,10 @@ void pbsys_main(void) {
 
         // Finalize application now that system resources are safely closed.
         pbsys_main_run_program_cleanup();
+
+        if (pb_power_test_supervisor_sleep_requested()) {
+            pb_power_test_supervisor_sleep();
+        }
     }
 
     // Stop system processes and selected drivers in reverse order. This will
