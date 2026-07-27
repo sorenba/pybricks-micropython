@@ -16,6 +16,7 @@
 #include <pbsys/status.h>
 #include <pbsys/light.h>
 #include <pbsys/program_stop.h>
+#include "../../lib/pbio/sys/program_stop.h"
 
 #include <pbio/color.h>
 #include <pbio/light.h>
