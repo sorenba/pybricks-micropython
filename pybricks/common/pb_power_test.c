@@ -19,6 +19,7 @@
 #include <pbsys/program_stop.h>
 #include <pbsys/storage.h>
 #include "../../lib/pbio/sys/program_stop.h"
+#include "../../lib/pbio/sys/storage.h"
 
 #include <pbio/color.h>
 #include <pbio/light.h>
