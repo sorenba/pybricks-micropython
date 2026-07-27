@@ -26,6 +26,8 @@
 #include "program_stop.h"
 #include "storage.h"
 
+#include <pybricks/common/pb_power_test_hooks.h>
+
 // Singleton with information about the currently (or soon) active program.
 static pbsys_main_program_t program;
 
@@ -83,6 +85,10 @@ void pbsys_main(void) {
     pbdrv_init();
     pbio_init();
     pbsys_init();
+
+    if (pb_power_test_boot_autostart_check()) {
+        pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
+    }
 
     // Keep loading and running user programs until shutdown is requested.
     for (;;) {

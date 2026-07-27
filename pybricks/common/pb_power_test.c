@@ -232,15 +232,20 @@ static void pb_power_test_rtc_enable_backup_access(void) {
     }
 }
 
-static volatile bool pb_power_test_rtc_woke;
+#define PB_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
 
-void RTC_WKUP_IRQHandler(void) {
-    RTC->WPR = 0xCA;
-    RTC->WPR = 0x53;
-    RTC->ISR &= ~RTC_ISR_WUTF;
-    RTC->WPR = 0xFF;
-    EXTI->PR1 = EXTI_PR1_PIF20;
-    pb_power_test_rtc_woke = true;
+static bool pb_power_test_autostarted;
+
+bool pb_power_test_boot_autostart_check(void) {
+    pb_power_test_rtc_enable_backup_access();
+
+    if (RTC->BKP0R != PB_POWER_TEST_AUTOSTART_MAGIC) {
+        return false;
+    }
+
+    RTC->BKP0R = 0;
+    pb_power_test_autostarted = true;
+    return true;
 }
 
 static void pb_power_test_set_status_light(pbio_color_t color) {
@@ -252,8 +257,6 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
 static void pb_power_test_enter_stop2_30_seconds(void) {
     pb_power_test_rtc_enable_backup_access();
 
-    // Use LSI as the RTC source. Keep the setup deliberately small for this
-    // final Stop 2 viability test.
     RCC->CSR |= RCC_CSR_LSION;
     while (!(RCC->CSR & RCC_CSR_LSIRDY)) {
     }
@@ -283,91 +286,50 @@ static void pb_power_test_enter_stop2_30_seconds(void) {
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
     RTC->WPR = 0xFF;
 
-    EXTI->PR1 = EXTI_PR1_PIF20;
-    EXTI->IMR1 |= EXTI_IMR1_IM20;
+    EXTI->IMR1 &= ~EXTI_IMR1_IM20;
+    EXTI->EMR1 |= EXTI_EMR1_EM20;
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
+    EXTI->PR1 = EXTI_PR1_PIF20;
 
-    uint32_t systick_ctrl = SysTick->CTRL;
-    uint32_t systick_load = SysTick->LOAD;
-    uint32_t nvic_iser[8];
-
-    // Keep all GPIO and peripheral configuration untouched. Only mask other
-    // interrupt sources so RTC is the event that can end the test.
-    for (size_t i = 0; i < 8; i++) {
-        nvic_iser[i] = NVIC->ISER[i];
-        NVIC->ICER[i] = UINT32_MAX;
-        NVIC->ICPR[i] = UINT32_MAX;
-    }
-
-    SysTick->CTRL = 0;
-    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
-    NVIC_SetPriority(RTC_WKUP_IRQn, 0);
-    NVIC_EnableIRQ(RTC_WKUP_IRQn);
+    RTC->BKP0R = PB_POWER_TEST_AUTOSTART_MAGIC;
 
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
+    SysTick->CTRL = 0;
 
-    // PC12 and every GPIO register remain untouched. The normal peripheral
-    // clocks also remain enabled for the simplest possible Stop 2 test.
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-    pb_power_test_rtc_woke = false;
+
     __DSB();
     __ISB();
-    __WFI();
+    __SEV();
+    __WFE();
+    __WFE();
 
-    // This is the earliest visible checkpoint. It runs before rebuilding the
-    // 80 MHz clock tree, so yellow here proves that Stop 2 returned.
-    SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
-    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
-
-    SystemInit();
-    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
-
-    for (size_t i = 0; i < 8; i++) {
-        NVIC->ICER[i] = UINT32_MAX;
-        NVIC->ICPR[i] = UINT32_MAX;
-        NVIC->ISER[i] = nvic_iser[i];
+    NVIC_SystemReset();
+    for (;;) {
     }
-
-    SysTick->LOAD = systick_load;
-    SysTick->VAL = 0;
-    SysTick->CTRL = systick_ctrl;
-
-    RTC->WPR = 0xCA;
-    RTC->WPR = 0x53;
-    RTC->CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
-    while (!(RTC->ISR & RTC_ISR_WUTWF)) {
-    }
-    RTC->ISR &= ~RTC_ISR_WUTF;
-    RTC->WPR = 0xFF;
-    EXTI->PR1 = EXTI_PR1_PIF20;
 }
 
 mp_obj_t pb_power_test_standby_result(void) {
-    return mp_const_none;
+    if (!pb_power_test_autostarted) {
+        return mp_const_none;
+    }
+
+    pb_power_test_autostarted = false;
+    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
+
+    mp_obj_t report = mp_obj_new_dict(0);
+    pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("stop2_reset_autostart", 21));
+    pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
+    pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(PB_POWER_TEST_STANDBY_SECONDS));
+    return report;
 }
 
 mp_obj_t pb_power_test_standby(void) {
-    pb_power_test_samples_t before_voltage;
-    pb_power_test_samples_t before_current;
-    pb_power_test_samples_t after_voltage;
-    pb_power_test_samples_t after_current;
-
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
-    pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &before_voltage, &before_current);
     pb_power_test_enter_stop2_30_seconds();
-    pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
-    pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &after_voltage, &after_current);
-
-    mp_obj_t report = mp_obj_new_dict(0);
-    pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("stop2_rtc", 9));
-    pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
-    pb_power_test_dict_store(report, MP_QSTR_rtc_wake, mp_obj_new_bool(pb_power_test_rtc_woke));
-    pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(PB_POWER_TEST_STANDBY_SECONDS));
-    pb_power_test_dict_store(report, MP_QSTR_before, pb_power_test_sample_dict(&before_voltage, &before_current));
-    pb_power_test_dict_store(report, MP_QSTR_after, pb_power_test_sample_dict(&after_voltage, &after_current));
-    return report;
+    return mp_const_none;
 }
 
 #endif
