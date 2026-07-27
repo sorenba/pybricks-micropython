@@ -238,6 +238,7 @@ static void pb_power_test_rtc_enable_backup_access(void) {
 
 static bool pb_power_test_autostarted;
 static bool pb_power_test_supervisor_sleep_pending;
+static volatile bool pb_power_test_rtc_wake_armed;
 
 bool pb_power_test_boot_autostart_check(void) {
     pb_power_test_rtc_enable_backup_access();
@@ -262,12 +263,19 @@ bool pb_power_test_supervisor_sleep_requested(void) {
 }
 
 void RTC_WKUP_IRQHandler(void) {
+    bool wake_timer_elapsed = pb_power_test_rtc_wake_armed && (RTC->ISR & RTC_ISR_WUTF);
+
     RTC->WPR = 0xCA;
     RTC->WPR = 0x53;
     RTC->ISR &= ~RTC_ISR_WUTF;
     RTC->WPR = 0xFF;
     EXTI->PR1 = EXTI_PR1_PIF20;
-    NVIC_SystemReset();
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+
+    if (wake_timer_elapsed) {
+        pb_power_test_rtc_wake_armed = false;
+        NVIC_SystemReset();
+    }
 }
 
 void pb_power_test_supervisor_sleep(void) {
@@ -292,6 +300,12 @@ void pb_power_test_supervisor_sleep(void) {
         RTC->WPR = 0xFF;
     }
 
+    pb_power_test_rtc_wake_armed = false;
+    NVIC_DisableIRQ(RTC_WKUP_IRQn);
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+    EXTI->IMR1 &= ~EXTI_IMR1_IM20;
+    EXTI->PR1 = EXTI_PR1_PIF20;
+
     RTC->WPR = 0xCA;
     RTC->WPR = 0x53;
     RTC->CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
@@ -303,10 +317,10 @@ void pb_power_test_supervisor_sleep(void) {
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
     RTC->WPR = 0xFF;
 
-    EXTI->IMR1 |= EXTI_IMR1_IM20;
     EXTI->EMR1 &= ~EXTI_EMR1_EM20;
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
     EXTI->PR1 = EXTI_PR1_PIF20;
+    EXTI->IMR1 |= EXTI_IMR1_IM20;
 
     RTC->BKP0R = PB_POWER_TEST_AUTOSTART_MAGIC;
 
@@ -319,18 +333,17 @@ void pb_power_test_supervisor_sleep(void) {
     }
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
     NVIC_SetPriority(RTC_WKUP_IRQn, 0);
+    pb_power_test_rtc_wake_armed = true;
     NVIC_EnableIRQ(RTC_WKUP_IRQn);
 
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 
-    __DSB();
-    __ISB();
-    __WFI();
-
-    NVIC_SystemReset();
     for (;;) {
+        __DSB();
+        __ISB();
+        __WFI();
     }
 }
 
