@@ -86,6 +86,7 @@ void pbsys_main(void) {
     pbdrv_init();
     pbio_init();
     pbsys_init();
+    pb_power_test_log_event(16, 0);
 
     bool power_test_boot_autostart = pb_power_test_boot_autostart_check();
 
@@ -170,15 +171,18 @@ void pbsys_main(void) {
 
         // Finalize application now that system resources are safely closed.
         pbsys_main_run_program_cleanup();
+        pb_power_test_log_event(3, 0);
 
         if (pb_power_test_supervisor_sleep_requested()) {
             // Save both the current slot and the one-shot autostart request in
             // external flash before the Stop 2 wake reset.
             pb_power_test_boot_autostart_request();
+            pb_power_test_log_event(5, 0);
             pbsys_storage_deinit();
             while (pbio_busy_count_busy()) {
                 pbio_os_run_processes_and_wait_for_event();
             }
+            pb_power_test_log_event(6, 0);
             pb_power_test_supervisor_sleep();
         }
     }

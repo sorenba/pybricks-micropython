@@ -18,7 +18,9 @@ MEMORY
     /* User data written by the firmware during shutdown. */
     FLASH_USER_0 (rx)     : ORIGIN = 0x0803C000, LENGTH = 12K
     /* As above, but this part is not counted by bootloader checksum. */
-    FLASH_USER_1 (rx)     : ORIGIN = 0x0803F000, LENGTH = 4K
+    FLASH_USER_1 (rx)     : ORIGIN = 0x0803F000, LENGTH = 2K
+    /* Dedicated persistent diagnostic log. Kept separate from Pybricks storage. */
+    FLASH_POWER_LOG (rx)  : ORIGIN = 0x0803F800, LENGTH = 2K
     RAM (xrw)             : ORIGIN = 0x20000000, LENGTH = 64K
 }
 
@@ -33,3 +35,7 @@ _pbdrv_block_device_storage_start = ORIGIN(FLASH_USER_0);
 
 /* Portion of the data parsed for the checksum on boot. */
 _pbsys_storage_checked_size = LENGTH(FLASH_USER_0);
+
+/* Dedicated power-test diagnostic log page. */
+_pb_power_test_log_start = ORIGIN(FLASH_POWER_LOG);
+_pb_power_test_log_size = LENGTH(FLASH_POWER_LOG);

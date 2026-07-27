@@ -89,6 +89,11 @@ static mp_obj_t pb_type_System_power_test_standby_result(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_standby_result_obj, pb_type_System_power_test_standby_result);
 
+static mp_obj_t pb_type_System_power_test_log(void) {
+    return pb_power_test_log();
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_log_obj, pb_type_System_power_test_log);
+
 #if PBIO_CONFIG_ENABLE_SYS
 
 static mp_obj_t pb_type_System_set_stop_button(mp_obj_t buttons_in) {
@@ -201,6 +206,7 @@ static const mp_rom_map_elem_t common_System_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_power_test_active), MP_ROM_PTR(&pb_type_System_power_test_active_obj) },
     { MP_ROM_QSTR(MP_QSTR_power_test_standby), MP_ROM_PTR(&pb_type_System_power_test_standby_obj) },
     { MP_ROM_QSTR(MP_QSTR_power_test_standby_result), MP_ROM_PTR(&pb_type_System_power_test_standby_result_obj) },
+    { MP_ROM_QSTR(MP_QSTR_power_test_log), MP_ROM_PTR(&pb_type_System_power_test_log_obj) },
     #if PBDRV_CONFIG_RESET
     { MP_ROM_QSTR(MP_QSTR_reset_reason), MP_ROM_PTR(&pb_type_System_reset_reason_obj) },
     #endif // PBDRV_CONFIG_RESET

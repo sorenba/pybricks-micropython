@@ -2,9 +2,11 @@
 #define _PYBRICKS_COMMON_PB_POWER_TEST_HOOKS_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 void pb_power_test_idle_enter(void);
 void pb_power_test_idle_exit(void);
+void pb_power_test_log_event(uint16_t event, uint16_t data);
 bool pb_power_test_boot_autostart_check(void);
 void pb_power_test_boot_autostart_request(void);
 void pb_power_test_boot_autostart_clear(void);

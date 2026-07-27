@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "py/obj.h"
 #include "py/runtime.h"
@@ -24,6 +25,7 @@
 #include <pbio/light.h>
 
 #include "stm32l4xx.h"
+#include STM32_HAL_H
 
 #include "pb_power_test.h"
 
@@ -40,6 +42,116 @@ typedef struct {
 #define PB_POWER_TEST_ACTIVE_MS 10000U
 #define PB_POWER_TEST_ACTIVE_SAMPLE_MS 10U
 #define PB_POWER_TEST_STANDBY_SECONDS 5U
+
+
+#define PB_POWER_TEST_LOG_MAGIC 0xA55AU
+#define PB_POWER_TEST_LOG_ERASED 0xFFFFU
+
+typedef struct {
+    uint16_t magic;
+    uint16_t sequence;
+    uint16_t event;
+    uint16_t data;
+} pb_power_test_log_record_t;
+
+#define PB_POWER_TEST_RESET_CHECKPOINT_MAGIC 0x52544357U
+
+typedef struct {
+    uint32_t magic;
+    uint16_t event;
+    uint16_t data;
+} pb_power_test_reset_checkpoint_t;
+
+static pb_power_test_reset_checkpoint_t pb_power_test_reset_checkpoint __attribute__((section(".noinit"), used));
+
+extern uint8_t _pb_power_test_log_start[];
+extern uint8_t _pb_power_test_log_size[];
+
+static uint32_t pb_power_test_log_address(void) {
+    return (uint32_t)_pb_power_test_log_start;
+}
+
+static uint32_t pb_power_test_log_size(void) {
+    return (uint32_t)_pb_power_test_log_size;
+}
+
+static uint32_t pb_power_test_log_capacity(void) {
+    return pb_power_test_log_size() / sizeof(pb_power_test_log_record_t);
+}
+
+static void pb_power_test_log_clear(void) {
+    if (HAL_FLASH_Unlock() != HAL_OK) {
+        return;
+    }
+
+    FLASH_EraseInitTypeDef erase_init = {
+        .Banks = FLASH_BANK_1,
+        .Page = (pb_power_test_log_address() - FLASH_BASE) / FLASH_PAGE_SIZE,
+        .NbPages = 1,
+        .TypeErase = FLASH_TYPEERASE_PAGES,
+    };
+
+    uint32_t irq = __get_PRIMASK();
+    __disable_irq();
+    uint32_t page_error;
+    HAL_FLASHEx_Erase(&erase_init, &page_error);
+    __set_PRIMASK(irq);
+    HAL_FLASH_Lock();
+}
+
+void pb_power_test_log_event(uint16_t event, uint16_t data) {
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)pb_power_test_log_address();
+    uint32_t capacity = pb_power_test_log_capacity();
+    uint32_t index = 0;
+
+    while (index < capacity && records[index].magic != PB_POWER_TEST_LOG_ERASED) {
+        index++;
+    }
+    if (index == capacity) {
+        return;
+    }
+
+    pb_power_test_log_record_t record = {
+        .magic = PB_POWER_TEST_LOG_MAGIC,
+        .sequence = index + 1,
+        .event = event,
+        .data = data,
+    };
+    uint64_t value;
+    memcpy(&value, &record, sizeof(value));
+
+    if (HAL_FLASH_Unlock() != HAL_OK) {
+        return;
+    }
+
+    uint32_t irq = __get_PRIMASK();
+    __disable_irq();
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, pb_power_test_log_address() + index * sizeof(record), value);
+    __set_PRIMASK(irq);
+    HAL_FLASH_Lock();
+}
+
+mp_obj_t pb_power_test_log(void) {
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)pb_power_test_log_address();
+    uint32_t capacity = pb_power_test_log_capacity();
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+
+    for (uint32_t i = 0; i < capacity; i++) {
+        if (records[i].magic == PB_POWER_TEST_LOG_ERASED) {
+            break;
+        }
+        if (records[i].magic != PB_POWER_TEST_LOG_MAGIC) {
+            continue;
+        }
+        mp_obj_t items[] = {
+            mp_obj_new_int_from_uint(records[i].sequence),
+            mp_obj_new_int_from_uint(records[i].event),
+            mp_obj_new_int_from_uint(records[i].data),
+        };
+        mp_obj_list_append(list, mp_obj_new_tuple(MP_ARRAY_SIZE(items), items));
+    }
+    return list;
+}
 
 static volatile bool pb_power_test_idle_monitoring;
 static volatile uint32_t pb_power_test_idle_start_us;
@@ -249,22 +361,31 @@ static bool pb_power_test_supervisor_sleep_pending;
 static volatile bool pb_power_test_rtc_wake_armed;
 
 bool pb_power_test_boot_autostart_check(void) {
+    if (pb_power_test_reset_checkpoint.magic == PB_POWER_TEST_RESET_CHECKPOINT_MAGIC) {
+        pb_power_test_log_event(24, pb_power_test_reset_checkpoint.event);
+        pb_power_test_reset_checkpoint.magic = 0;
+    }
+    pb_power_test_log_event(17, 0);
     uint8_t *data;
     if (pbsys_storage_get_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, &data, sizeof(pb_power_test_autostart_marker_t)) != PBIO_SUCCESS) {
+        pb_power_test_log_event(18, 1);
         return false;
     }
 
     pb_power_test_autostart_marker_t marker;
     memcpy(&marker, data, sizeof(marker));
     if (marker.magic != PB_POWER_TEST_AUTOSTART_MAGIC || marker.magic_inverse != ~PB_POWER_TEST_AUTOSTART_MAGIC) {
+        pb_power_test_log_event(18, 2);
         return false;
     }
 
+    pb_power_test_log_event(19, 0);
     pb_power_test_autostarted = true;
     return true;
 }
 
 void pb_power_test_boot_autostart_request(void) {
+    pb_power_test_log_event(4, 0);
     pb_power_test_autostart_marker_t marker = {
         .magic = PB_POWER_TEST_AUTOSTART_MAGIC,
         .magic_inverse = ~PB_POWER_TEST_AUTOSTART_MAGIC,
@@ -273,6 +394,7 @@ void pb_power_test_boot_autostart_request(void) {
 }
 
 void pb_power_test_boot_autostart_clear(void) {
+    pb_power_test_log_event(20, 0);
     pb_power_test_autostart_marker_t marker = { 0 };
     pbsys_storage_set_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, (const uint8_t *)&marker, sizeof(marker));
 }
@@ -284,10 +406,12 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
 }
 
 void pb_power_test_boot_autostart_confirm(void) {
+    pb_power_test_log_event(22, 0);
     pb_power_test_set_status_light(PBIO_COLOR_ORANGE);
 }
 
 void pb_power_test_boot_autostart_failed(void) {
+    pb_power_test_log_event(23, 0);
     pb_power_test_set_status_light(PBIO_COLOR_RED);
 }
 
@@ -307,12 +431,18 @@ void RTC_WKUP_IRQHandler(void) {
 
     if (wake_timer_elapsed) {
         pb_power_test_rtc_wake_armed = false;
+        pb_power_test_reset_checkpoint.magic = PB_POWER_TEST_RESET_CHECKPOINT_MAGIC;
+        pb_power_test_reset_checkpoint.event = 14;
+        pb_power_test_reset_checkpoint.data = 0;
+        __DSB();
         NVIC_SystemReset();
     }
 }
 
 void pb_power_test_supervisor_sleep(void) {
+    pb_power_test_log_event(7, 0);
     pb_power_test_supervisor_sleep_pending = false;
+    pb_power_test_log_event(8, 0);
     pb_power_test_rtc_enable_backup_access();
 
     RCC->CSR |= RCC_CSR_LSION;
@@ -349,6 +479,7 @@ void pb_power_test_supervisor_sleep(void) {
     RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_2;
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
     RTC->WPR = 0xFF;
+    pb_power_test_log_event(9, 0);
 
     EXTI->EMR1 &= ~EXTI_EMR1_EM20;
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
@@ -356,7 +487,9 @@ void pb_power_test_supervisor_sleep(void) {
     EXTI->IMR1 |= EXTI_IMR1_IM20;
 
     pbdrv_watchdog_prepare_for_stop();
+    pb_power_test_log_event(10, 0);
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
+    pb_power_test_log_event(11, 0);
     SysTick->CTRL = 0;
 
     for (size_t i = 0; i < 8; i++) {
@@ -371,6 +504,8 @@ void pb_power_test_supervisor_sleep(void) {
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+
+    pb_power_test_log_event(12, 0);
 
     for (;;) {
         __DSB();
@@ -395,8 +530,11 @@ mp_obj_t pb_power_test_standby_result(void) {
 }
 
 mp_obj_t pb_power_test_standby(void) {
+    pb_power_test_log_clear();
+    pb_power_test_log_event(1, 0);
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_supervisor_sleep_pending = true;
+    pb_power_test_log_event(2, 0);
     pbsys_program_stop(false);
     return mp_const_none;
 }
