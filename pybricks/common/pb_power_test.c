@@ -65,19 +65,9 @@ typedef struct {
 static pb_power_test_reset_checkpoint_t pb_power_test_reset_checkpoint __attribute__((section(".noinit"), used));
 
 extern uint8_t _pb_power_test_log_start[];
-extern uint8_t _pb_power_test_log_size[];
 
-static uint32_t pb_power_test_log_address(void) {
-    return (uint32_t)_pb_power_test_log_start;
-}
-
-static uint32_t pb_power_test_log_size(void) {
-    return (uint32_t)_pb_power_test_log_size;
-}
-
-static uint32_t pb_power_test_log_capacity(void) {
-    return pb_power_test_log_size() / sizeof(pb_power_test_log_record_t);
-}
+#define PB_POWER_TEST_LOG_ADDRESS ((uint32_t)_pb_power_test_log_start)
+#define PB_POWER_TEST_LOG_CAPACITY (2048U / sizeof(pb_power_test_log_record_t))
 
 static void pb_power_test_log_clear(void) {
     if (HAL_FLASH_Unlock() != HAL_OK) {
@@ -86,7 +76,7 @@ static void pb_power_test_log_clear(void) {
 
     FLASH_EraseInitTypeDef erase_init = {
         .Banks = FLASH_BANK_1,
-        .Page = (pb_power_test_log_address() - FLASH_BASE) / FLASH_PAGE_SIZE,
+        .Page = (PB_POWER_TEST_LOG_ADDRESS - FLASH_BASE) / FLASH_PAGE_SIZE,
         .NbPages = 1,
         .TypeErase = FLASH_TYPEERASE_PAGES,
     };
@@ -100,8 +90,8 @@ static void pb_power_test_log_clear(void) {
 }
 
 void pb_power_test_log_event(uint16_t event, uint16_t data) {
-    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)pb_power_test_log_address();
-    uint32_t capacity = pb_power_test_log_capacity();
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)PB_POWER_TEST_LOG_ADDRESS;
+    uint32_t capacity = PB_POWER_TEST_LOG_CAPACITY;
     uint32_t index = 0;
 
     while (index < capacity && records[index].magic != PB_POWER_TEST_LOG_ERASED) {
@@ -126,14 +116,14 @@ void pb_power_test_log_event(uint16_t event, uint16_t data) {
 
     uint32_t irq = __get_PRIMASK();
     __disable_irq();
-    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, pb_power_test_log_address() + index * sizeof(record), value);
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, PB_POWER_TEST_LOG_ADDRESS + index * sizeof(record), value);
     __set_PRIMASK(irq);
     HAL_FLASH_Lock();
 }
 
 mp_obj_t pb_power_test_log(void) {
-    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)pb_power_test_log_address();
-    uint32_t capacity = pb_power_test_log_capacity();
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)PB_POWER_TEST_LOG_ADDRESS;
+    uint32_t capacity = PB_POWER_TEST_LOG_CAPACITY;
     mp_obj_t list = mp_obj_new_list(0, NULL);
 
     for (uint32_t i = 0; i < capacity; i++) {
