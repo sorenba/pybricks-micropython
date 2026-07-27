@@ -90,6 +90,14 @@ void pbsys_main(void) {
     bool power_test_boot_autostart = pb_power_test_boot_autostart_check();
 
     if (power_test_boot_autostart) {
+        // Clear and persist the one-shot marker before starting the program so
+        // a later reset cannot create an autostart loop.
+        pbsys_storage_power_test_autostart_clear();
+        pbsys_storage_deinit();
+        while (pbio_busy_count_busy()) {
+            pbio_os_run_processes_and_wait_for_event();
+        }
+
         pbio_error_t err = pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
         if (err == PBIO_SUCCESS) {
             pb_power_test_boot_autostart_confirm();
@@ -164,9 +172,9 @@ void pbsys_main(void) {
         pbsys_main_run_program_cleanup();
 
         if (pb_power_test_supervisor_sleep_requested()) {
-            // Program downloads are staged in RAM and normally persisted during
-            // shutdown. Save the current slot before the Stop 2 wake reset so
-            // the boot autostart path can load it from flash.
+            // Save both the current slot and the one-shot autostart request in
+            // external flash before the Stop 2 wake reset.
+            pbsys_storage_power_test_autostart_request();
             pbsys_storage_deinit();
             while (pbio_busy_count_busy()) {
                 pbio_os_run_processes_and_wait_for_event();

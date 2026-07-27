@@ -117,6 +117,22 @@ void pbsys_storage_request_write(void) {
     data_map_write_on_shutdown = true;
 }
 
+#define PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
+
+bool pbsys_storage_power_test_autostart_is_requested(void) {
+    return map->power_test_autostart_magic == PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC;
+}
+
+void pbsys_storage_power_test_autostart_request(void) {
+    map->power_test_autostart_magic = PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC;
+    pbsys_storage_request_write();
+}
+
+void pbsys_storage_power_test_autostart_clear(void) {
+    map->power_test_autostart_magic = 0;
+    pbsys_storage_request_write();
+}
+
 /**
  * Erases user data, erases user program meta data and restores user settings
  * to default. Does not actually erase program data, but it becomes

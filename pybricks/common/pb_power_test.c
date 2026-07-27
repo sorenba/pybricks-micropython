@@ -17,6 +17,7 @@
 #include <pbsys/status.h>
 #include <pbsys/light.h>
 #include <pbsys/program_stop.h>
+#include <pbsys/storage.h>
 #include "../../lib/pbio/sys/program_stop.h"
 
 #include <pbio/color.h>
@@ -38,7 +39,7 @@ typedef struct {
 #define PB_POWER_TEST_SAMPLE_MS 500U
 #define PB_POWER_TEST_ACTIVE_MS 10000U
 #define PB_POWER_TEST_ACTIVE_SAMPLE_MS 10U
-#define PB_POWER_TEST_STANDBY_SECONDS 20U
+#define PB_POWER_TEST_STANDBY_SECONDS 5U
 
 static volatile bool pb_power_test_idle_monitoring;
 static volatile uint32_t pb_power_test_idle_start_us;
@@ -235,16 +236,12 @@ static void pb_power_test_rtc_enable_backup_access(void) {
     }
 }
 
-#define PB_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
-
 static bool pb_power_test_autostarted;
 static bool pb_power_test_supervisor_sleep_pending;
 static volatile bool pb_power_test_rtc_wake_armed;
 
 bool pb_power_test_boot_autostart_check(void) {
-    pb_power_test_rtc_enable_backup_access();
-
-    if (RTC->BKP0R != PB_POWER_TEST_AUTOSTART_MAGIC) {
+    if (!pbsys_storage_power_test_autostart_is_requested()) {
         return false;
     }
 
@@ -259,8 +256,6 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
 }
 
 void pb_power_test_boot_autostart_confirm(void) {
-    pb_power_test_rtc_enable_backup_access();
-    RTC->BKP0R = 0;
     pb_power_test_set_status_light(PBIO_COLOR_ORANGE);
 }
 
@@ -331,8 +326,6 @@ void pb_power_test_supervisor_sleep(void) {
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
     EXTI->PR1 = EXTI_PR1_PIF20;
     EXTI->IMR1 |= EXTI_IMR1_IM20;
-
-    RTC->BKP0R = PB_POWER_TEST_AUTOSTART_MAGIC;
 
     pbdrv_watchdog_prepare_for_stop();
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);

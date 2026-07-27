@@ -22,9 +22,9 @@ else:
     motor.stop()
     wait(2000)
 
-    print("3. Running 10-second active idle power test...")
-    active_report = hub.system.power_test_active()
-    print(active_report)
+    # print("3. Running 10-second active idle power test...")
+    # active_report = hub.system.power_test_active()
+    # print(active_report)
 
-    print("4. Requesting supervisor-controlled 20-second Stop 2 + RTC test...")
+    print("3. Requesting supervisor-controlled 5-second Stop 2 + RTC test...")
     hub.system.power_test_standby()
