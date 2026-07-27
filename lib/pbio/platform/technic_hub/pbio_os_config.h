@@ -2,6 +2,8 @@
 
 #include "stm32l4xx.h"
 
+#include "../../../../pybricks/common/pb_power_test.h"
+
 typedef uint32_t pbio_os_irq_flags_t;
 
 static inline pbio_os_irq_flags_t pbio_os_hook_disable_irq(void) {
@@ -15,5 +17,7 @@ static inline void pbio_os_hook_enable_irq(pbio_os_irq_flags_t flags) {
 }
 
 static inline void pbio_os_hook_wait_for_interrupt(pbio_os_irq_flags_t flags) {
+    pb_power_test_idle_enter();
     __WFI();
+    pb_power_test_idle_exit();
 }

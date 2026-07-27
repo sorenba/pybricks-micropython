@@ -19,6 +19,8 @@
 #include "py/runtime.h"
 
 #include <pybricks/common.h>
+
+#include "pb_power_test.h"
 #include <pybricks/parameters.h>
 #include <pybricks/util_pb/pb_error.h>
 #include <pybricks/util_mp/pb_kwarg_helper.h>
@@ -71,6 +73,16 @@ static mp_obj_t pb_type_System_info(void) {
     return info_dict;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_info_obj, pb_type_System_info);
+
+static mp_obj_t pb_type_System_power_test_active(void) {
+    return pb_power_test_active();
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_active_obj, pb_type_System_power_test_active);
+
+static mp_obj_t pb_type_System_power_test_standby(void) {
+    return pb_power_test_standby();
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_standby_obj, pb_type_System_power_test_standby);
 
 #if PBIO_CONFIG_ENABLE_SYS
 
@@ -181,6 +193,8 @@ static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_umm_info_obj, pb_type_System_umm
 static const mp_rom_map_elem_t common_System_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_name), MP_ROM_PTR(&pb_type_System_name_obj) },
     { MP_ROM_QSTR(MP_QSTR_info), MP_ROM_PTR(&pb_type_System_info_obj) },
+    { MP_ROM_QSTR(MP_QSTR_power_test_active), MP_ROM_PTR(&pb_type_System_power_test_active_obj) },
+    { MP_ROM_QSTR(MP_QSTR_power_test_standby), MP_ROM_PTR(&pb_type_System_power_test_standby_obj) },
     #if PBDRV_CONFIG_RESET
     { MP_ROM_QSTR(MP_QSTR_reset_reason), MP_ROM_PTR(&pb_type_System_reset_reason_obj) },
     #endif // PBDRV_CONFIG_RESET
