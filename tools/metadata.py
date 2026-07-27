@@ -7,6 +7,9 @@ Pybricks firmware metadata file generation tool.
 
 Generates a .json file with information about a Pybricks firmware binary blob.
 
+Technic Hub builds emit metadata version 2.1.0 for compatibility with the current
+pybricksdev firmware parser. All other builds emit metadata version 3.0.0.
+
 The manifest carries the shared identity of the firmware at the top level and one
 or more architecture variants under the "variants" key. Each variant corresponds to
 a pbio platform (e.g. prime_hub_f4, prime_hub_h5) of the same product. Example::
@@ -65,6 +68,9 @@ sys.path.append(os.path.join(TOP, "tools"))
 
 # metadata file format version
 VERSION = "3.0.0"
+
+# Metadata version supported by the current pybricksdev firmware parser.
+PYBRICKSDEV_COMPAT_VERSION = "2.1.0"
 
 # pbio platform -> product info
 PLATFORM_INFO = {
@@ -172,7 +178,20 @@ def generate(
         variant["hub-name-offset"] = name_start - flash_origin
         variant["hub-name-size"] = name_size
 
-    metadata["variants"] = [variant]
+    if platform == "technic_hub":
+        # pybricksdev currently supports metadata through version 2.1.0.
+        # Keep the Technic Hub package compatible without changing firmware bytes.
+        metadata = {
+            "metadata-version": PYBRICKSDEV_COMPAT_VERSION,
+            "firmware-version": fw_version,
+            "device-id": device_id,
+            "checksum-type": variant["checksum-type"],
+            "checksum-size": variant["checksum-size"],
+            "hub-name-offset": variant["hub-name-offset"],
+            "hub-name-size": variant["hub-name-size"],
+        }
+    else:
+        metadata["variants"] = [variant]
 
     json.dump(metadata, out_file, indent=4, sort_keys=True)
 
