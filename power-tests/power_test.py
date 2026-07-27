@@ -18,7 +18,7 @@ print("3. Running 10-second active idle power test...")
 active_report = hub.system.power_test_active()
 print(active_report)
 
-print("4. Entering 60-second Stop 2 + RTC test...")
+print("4. Entering 30-second Stop 2 + RTC test...")
 stop2_report = hub.system.power_test_standby()
 
 print("5. RTC wake completed. LED should now be yellow.")

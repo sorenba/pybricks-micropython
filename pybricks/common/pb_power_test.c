@@ -35,7 +35,7 @@ typedef struct {
 #define PB_POWER_TEST_SAMPLE_MS 500U
 #define PB_POWER_TEST_ACTIVE_MS 10000U
 #define PB_POWER_TEST_ACTIVE_SAMPLE_MS 10U
-#define PB_POWER_TEST_STANDBY_SECONDS 60U
+#define PB_POWER_TEST_STANDBY_SECONDS 30U
 
 static volatile bool pb_power_test_idle_monitoring;
 static volatile uint32_t pb_power_test_idle_start_us;
@@ -249,9 +249,11 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
     }
 }
 
-static void pb_power_test_enter_stop2_60_seconds(void) {
+static void pb_power_test_enter_stop2_30_seconds(void) {
     pb_power_test_rtc_enable_backup_access();
 
+    // Use LSI as the RTC source. Keep the setup deliberately small for this
+    // final Stop 2 viability test.
     RCC->CSR |= RCC_CSR_LSION;
     while (!(RCC->CSR & RCC_CSR_LSIRDY)) {
     }
@@ -287,13 +289,10 @@ static void pb_power_test_enter_stop2_60_seconds(void) {
 
     uint32_t systick_ctrl = SysTick->CTRL;
     uint32_t systick_load = SysTick->LOAD;
-    uint32_t ahb1enr = RCC->AHB1ENR;
-    uint32_t ahb2enr = RCC->AHB2ENR;
-    uint32_t apb1enr1 = RCC->APB1ENR1;
-    uint32_t apb1enr2 = RCC->APB1ENR2;
-    uint32_t apb2enr = RCC->APB2ENR;
     uint32_t nvic_iser[8];
 
+    // Keep all GPIO and peripheral configuration untouched. Only mask other
+    // interrupt sources so RTC is the event that can end the test.
     for (size_t i = 0; i < 8; i++) {
         nvic_iser[i] = NVIC->ISER[i];
         NVIC->ICER[i] = UINT32_MAX;
@@ -307,14 +306,8 @@ static void pb_power_test_enter_stop2_60_seconds(void) {
 
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
 
-    // PC12 must remain high to keep the Technic Hub's main power latch enabled.
-    RCC->AHB1ENR = RCC_AHB1ENR_FLASHEN;
-    RCC->AHB2ENR = RCC_AHB2ENR_GPIOCEN;
-    RCC->APB1ENR1 = RCC_APB1ENR1_PWREN;
-    RCC->APB1ENR2 = 0;
-    RCC->APB2ENR = RCC_APB2ENR_SYSCFGEN;
-    (void)RCC->APB2ENR;
-
+    // PC12 and every GPIO register remain untouched. The normal peripheral
+    // clocks also remain enabled for the simplest possible Stop 2 test.
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
@@ -322,16 +315,14 @@ static void pb_power_test_enter_stop2_60_seconds(void) {
     __DSB();
     __ISB();
     __WFI();
+
+    // This is the earliest visible checkpoint. It runs before rebuilding the
+    // 80 MHz clock tree, so yellow here proves that Stop 2 returned.
     SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 
-    // Stop 2 resumes from MSI. Recreate the normal 80 MHz Technic Hub clock tree.
     SystemInit();
-
-    RCC->AHB1ENR = ahb1enr;
-    RCC->AHB2ENR = ahb2enr;
-    RCC->APB1ENR1 = apb1enr1;
-    RCC->APB1ENR2 = apb1enr2;
-    RCC->APB2ENR = apb2enr;
+    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 
     for (size_t i = 0; i < 8; i++) {
         NVIC->ICER[i] = UINT32_MAX;
@@ -351,8 +342,6 @@ static void pb_power_test_enter_stop2_60_seconds(void) {
     RTC->ISR &= ~RTC_ISR_WUTF;
     RTC->WPR = 0xFF;
     EXTI->PR1 = EXTI_PR1_PIF20;
-
-    pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 }
 
 mp_obj_t pb_power_test_standby_result(void) {
@@ -367,7 +356,7 @@ mp_obj_t pb_power_test_standby(void) {
 
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &before_voltage, &before_current);
-    pb_power_test_enter_stop2_60_seconds();
+    pb_power_test_enter_stop2_30_seconds();
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &after_voltage, &after_current);
 
