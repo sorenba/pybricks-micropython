@@ -27,4 +27,13 @@ void pbdrv_watchdog_update(void) {
     IWDG->KR = 0xaaaa;
 }
 
+void pbdrv_watchdog_prepare_for_stop(void) {
+    IWDG->KR = 0x5555; // enable register access
+    IWDG->PR = 6; // divide by 256
+    IWDG->RLR = 4095; // maximum reload: about 32.8 seconds with 32 kHz LSI
+    while (IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) {
+    }
+    IWDG->KR = 0xaaaa; // start the extended interval from a full counter
+}
+
 #endif // PBDRV_CONFIG_WATCHDOG_STM32

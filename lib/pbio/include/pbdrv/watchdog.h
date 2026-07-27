@@ -18,9 +18,19 @@
  */
 void pbdrv_watchdog_update(void);
 
+/**
+ * Extends the watchdog timeout to the maximum supported duration before a
+ * deliberate low-power interval. The next hardware reset restores the normal
+ * watchdog configuration.
+ */
+void pbdrv_watchdog_prepare_for_stop(void);
+
 #else // PBDRV_CONFIG_WATCHDOG
 
 static inline void pbdrv_watchdog_update(void) {
+}
+
+static inline void pbdrv_watchdog_prepare_for_stop(void) {
 }
 
 #endif // PBDRV_CONFIG_WATCHDOG

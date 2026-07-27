@@ -13,6 +13,7 @@
 #include <pbdrv/adc.h>
 #include <pbdrv/battery.h>
 #include <pbdrv/clock.h>
+#include <pbdrv/watchdog.h>
 #include <pbsys/status.h>
 #include <pbsys/light.h>
 #include <pbsys/program_stop.h>
@@ -324,6 +325,7 @@ void pb_power_test_supervisor_sleep(void) {
 
     RTC->BKP0R = PB_POWER_TEST_AUTOSTART_MAGIC;
 
+    pbdrv_watchdog_prepare_for_stop();
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
     SysTick->CTRL = 0;
 
