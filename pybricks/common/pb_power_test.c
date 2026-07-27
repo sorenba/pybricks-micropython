@@ -117,6 +117,24 @@ static void pb_power_test_dict_store(mp_obj_t dict, qstr key, mp_obj_t value) {
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(key), value);
 }
 
+static mp_obj_t pb_power_test_uint64_string(uint64_t value) {
+    char buffer[20];
+    size_t length = 0;
+
+    do {
+        buffer[length++] = '0' + value % 10;
+        value /= 10;
+    } while (value);
+
+    for (size_t i = 0; i < length / 2; i++) {
+        char temporary = buffer[i];
+        buffer[i] = buffer[length - i - 1];
+        buffer[length - i - 1] = temporary;
+    }
+
+    return mp_obj_new_str(buffer, length);
+}
+
 static uint32_t pb_power_test_current_ma(uint32_t current_raw) {
     return (current_raw + PBDRV_CONFIG_BATTERY_ADC_CURRENT_RAW_OFFSET) *
         PBDRV_CONFIG_BATTERY_ADC_CURRENT_SCALED_MAX /
@@ -137,12 +155,12 @@ static mp_obj_t pb_power_test_sample_dict(const pb_power_test_samples_t *voltage
     pb_power_test_dict_store(dict, MP_QSTR_voltage_raw_mean, mp_obj_new_int_from_uint(voltage_raw_mean));
     pb_power_test_dict_store(dict, MP_QSTR_voltage_raw_min, mp_obj_new_int_from_uint(voltage->count ? voltage->minimum : 0));
     pb_power_test_dict_store(dict, MP_QSTR_voltage_raw_max, mp_obj_new_int_from_uint(voltage->maximum));
-    pb_power_test_dict_store(dict, MP_QSTR_voltage_raw_variance, mp_obj_new_int_from_ull(pb_power_test_samples_variance(voltage)));
+    pb_power_test_dict_store(dict, MP_QSTR_voltage_raw_variance, pb_power_test_uint64_string(pb_power_test_samples_variance(voltage)));
     pb_power_test_dict_store(dict, MP_QSTR_voltage_mv_mean, mp_obj_new_int_from_uint(pb_power_test_voltage_mv(voltage_raw_mean, current_raw_mean)));
     pb_power_test_dict_store(dict, MP_QSTR_current_raw_mean, mp_obj_new_int_from_uint(current_raw_mean));
     pb_power_test_dict_store(dict, MP_QSTR_current_raw_min, mp_obj_new_int_from_uint(current->count ? current->minimum : 0));
     pb_power_test_dict_store(dict, MP_QSTR_current_raw_max, mp_obj_new_int_from_uint(current->maximum));
-    pb_power_test_dict_store(dict, MP_QSTR_current_raw_variance, mp_obj_new_int_from_ull(pb_power_test_samples_variance(current)));
+    pb_power_test_dict_store(dict, MP_QSTR_current_raw_variance, pb_power_test_uint64_string(pb_power_test_samples_variance(current)));
     pb_power_test_dict_store(dict, MP_QSTR_current_ma_mean, mp_obj_new_int_from_uint(pb_power_test_current_ma(current_raw_mean)));
     pb_power_test_dict_store(dict, MP_QSTR_sample_count, mp_obj_new_int_from_uint(voltage->count));
     return dict;
