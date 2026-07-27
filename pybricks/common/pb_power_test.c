@@ -204,10 +204,10 @@ mp_obj_t pb_power_test_active(void) {
     pb_power_test_dict_store(report, MP_QSTR_electrical, pb_power_test_sample_dict(&voltage, &current));
 
     mp_obj_t cpu = mp_obj_new_dict(0);
-    pb_power_test_dict_store(cpu, MP_QSTR_idle_us, mp_obj_new_int_from_ull(idle_us));
-    pb_power_test_dict_store(cpu, MP_QSTR_active_us, mp_obj_new_int_from_ull(elapsed_us - idle_us));
+    pb_power_test_dict_store(cpu, MP_QSTR_idle_us, mp_obj_new_int_from_uint((uint32_t)idle_us));
+    pb_power_test_dict_store(cpu, MP_QSTR_active_us, mp_obj_new_int_from_uint((uint32_t)(elapsed_us - idle_us)));
     pb_power_test_dict_store(cpu, MP_QSTR_idle_entries, mp_obj_new_int_from_uint(pb_power_test_idle_entries));
-    pb_power_test_dict_store(cpu, MP_QSTR_idle_percent_x1000, mp_obj_new_int_from_ull(elapsed_us ? idle_us * 100000ULL / elapsed_us : 0));
+    pb_power_test_dict_store(cpu, MP_QSTR_idle_percent_x1000, mp_obj_new_int_from_uint((uint32_t)(elapsed_us ? idle_us * 100000ULL / elapsed_us : 0)));
     pb_power_test_dict_store(report, MP_QSTR_cpu, cpu);
 
     mp_obj_t electronics = mp_obj_new_dict(0);
@@ -315,41 +315,47 @@ static void pb_power_test_enter_standby_60_seconds(void) {
     }
 }
 
-mp_obj_t pb_power_test_standby(void) {
+mp_obj_t pb_power_test_standby_result(void) {
     pb_power_test_rtc_enable_backup_access();
 
     pb_power_test_backup_t backup;
     bool standby_wake = (PWR->SR1 & PWR_SR1_SBF) != 0;
-    if (standby_wake && pb_power_test_backup_read(&backup)) {
-        pb_power_test_samples_t voltage;
-        pb_power_test_samples_t current;
-        pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
-        pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &voltage, &current);
-
-        mp_obj_t report = mp_obj_new_dict(0);
-        pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("standby_rtc", 11));
-        pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
-        pb_power_test_dict_store(report, MP_QSTR_standby_wake, mp_const_true);
-        pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(backup.requested_seconds));
-
-        mp_obj_t before = mp_obj_new_dict(0);
-        uint32_t before_voltage_raw_mean = backup.before_voltage_sum / backup.before_sample_count;
-        uint32_t before_current_raw_mean = backup.before_current_sum / backup.before_sample_count;
-        pb_power_test_dict_store(before, MP_QSTR_voltage_raw_mean, mp_obj_new_int_from_uint(before_voltage_raw_mean));
-        pb_power_test_dict_store(before, MP_QSTR_voltage_raw_min, mp_obj_new_int_from_uint(backup.before_voltage_min_max & 0xFFFF));
-        pb_power_test_dict_store(before, MP_QSTR_voltage_raw_max, mp_obj_new_int_from_uint(backup.before_voltage_min_max >> 16));
-        pb_power_test_dict_store(before, MP_QSTR_voltage_mv_mean, mp_obj_new_int_from_uint(pb_power_test_voltage_mv(before_voltage_raw_mean, before_current_raw_mean)));
-        pb_power_test_dict_store(before, MP_QSTR_current_raw_mean, mp_obj_new_int_from_uint(before_current_raw_mean));
-        pb_power_test_dict_store(before, MP_QSTR_current_raw_min, mp_obj_new_int_from_uint(backup.before_current_min_max & 0xFFFF));
-        pb_power_test_dict_store(before, MP_QSTR_current_raw_max, mp_obj_new_int_from_uint(backup.before_current_min_max >> 16));
-        pb_power_test_dict_store(before, MP_QSTR_current_ma_mean, mp_obj_new_int_from_uint(pb_power_test_current_ma(before_current_raw_mean)));
-        pb_power_test_dict_store(before, MP_QSTR_sample_count, mp_obj_new_int_from_uint(backup.before_sample_count));
-        pb_power_test_dict_store(report, MP_QSTR_before, before);
-        pb_power_test_dict_store(report, MP_QSTR_after, pb_power_test_sample_dict(&voltage, &current));
-        pb_power_test_backup_clear();
-        PWR->SCR = PWR_SCR_CSBF | PWR_SCR_CWUF;
-        return report;
+    if (!standby_wake || !pb_power_test_backup_read(&backup)) {
+        return mp_const_none;
     }
+
+    pb_power_test_samples_t voltage;
+    pb_power_test_samples_t current;
+    pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
+    pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, 1, &voltage, &current);
+
+    mp_obj_t report = mp_obj_new_dict(0);
+    pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("standby_rtc", 11));
+    pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
+    pb_power_test_dict_store(report, MP_QSTR_standby_wake, mp_const_true);
+    pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(backup.requested_seconds));
+
+    mp_obj_t before = mp_obj_new_dict(0);
+    uint32_t before_voltage_raw_mean = backup.before_voltage_sum / backup.before_sample_count;
+    uint32_t before_current_raw_mean = backup.before_current_sum / backup.before_sample_count;
+    pb_power_test_dict_store(before, MP_QSTR_voltage_raw_mean, mp_obj_new_int_from_uint(before_voltage_raw_mean));
+    pb_power_test_dict_store(before, MP_QSTR_voltage_raw_min, mp_obj_new_int_from_uint(backup.before_voltage_min_max & 0xFFFF));
+    pb_power_test_dict_store(before, MP_QSTR_voltage_raw_max, mp_obj_new_int_from_uint(backup.before_voltage_min_max >> 16));
+    pb_power_test_dict_store(before, MP_QSTR_voltage_mv_mean, mp_obj_new_int_from_uint(pb_power_test_voltage_mv(before_voltage_raw_mean, before_current_raw_mean)));
+    pb_power_test_dict_store(before, MP_QSTR_current_raw_mean, mp_obj_new_int_from_uint(before_current_raw_mean));
+    pb_power_test_dict_store(before, MP_QSTR_current_raw_min, mp_obj_new_int_from_uint(backup.before_current_min_max & 0xFFFF));
+    pb_power_test_dict_store(before, MP_QSTR_current_raw_max, mp_obj_new_int_from_uint(backup.before_current_min_max >> 16));
+    pb_power_test_dict_store(before, MP_QSTR_current_ma_mean, mp_obj_new_int_from_uint(pb_power_test_current_ma(before_current_raw_mean)));
+    pb_power_test_dict_store(before, MP_QSTR_sample_count, mp_obj_new_int_from_uint(backup.before_sample_count));
+    pb_power_test_dict_store(report, MP_QSTR_before, before);
+    pb_power_test_dict_store(report, MP_QSTR_after, pb_power_test_sample_dict(&voltage, &current));
+    pb_power_test_backup_clear();
+    PWR->SCR = PWR_SCR_CSBF | PWR_SCR_CWUF;
+    return report;
+}
+
+mp_obj_t pb_power_test_standby(void) {
+    pb_power_test_rtc_enable_backup_access();
 
     pb_power_test_samples_t voltage;
     pb_power_test_samples_t current;
