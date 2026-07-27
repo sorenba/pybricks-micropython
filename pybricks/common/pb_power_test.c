@@ -364,7 +364,6 @@ bool pb_power_test_boot_autostart_check(void) {
 }
 
 void pb_power_test_boot_autostart_request(void) {
-    pb_power_test_log_event(4, 0);
     pb_power_test_autostart_marker_t marker = {
         .magic = PB_POWER_TEST_AUTOSTART_MAGIC,
         .magic_inverse = ~PB_POWER_TEST_AUTOSTART_MAGIC,
@@ -512,12 +511,19 @@ mp_obj_t pb_power_test_standby_result(void) {
     return report;
 }
 
-mp_obj_t pb_power_test_standby(void) {
+void pb_power_test_log_begin_sleep_sequence(void) {
     pb_power_test_log_clear();
     pb_power_test_log_event(1, 0);
+    pb_power_test_log_event(2, 0);
+    pb_power_test_log_event(3, 0);
+    pb_power_test_log_event(4, 0);
+    pb_power_test_log_event(5, 0);
+    pb_power_test_log_event(6, 0);
+}
+
+mp_obj_t pb_power_test_standby(void) {
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_supervisor_sleep_pending = true;
-    pb_power_test_log_event(2, 0);
     pbsys_program_stop(false);
     return mp_const_none;
 }

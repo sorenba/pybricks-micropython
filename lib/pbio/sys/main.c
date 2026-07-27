@@ -171,18 +171,18 @@ void pbsys_main(void) {
 
         // Finalize application now that system resources are safely closed.
         pbsys_main_run_program_cleanup();
-        pb_power_test_log_event(3, 0);
 
         if (pb_power_test_supervisor_sleep_requested()) {
             // Save both the current slot and the one-shot autostart request in
-            // external flash before the Stop 2 wake reset.
+            // external flash before the Stop 2 wake reset. This storage write
+            // erases the diagnostic page, so rebuild the complete pre-sleep
+            // checkpoint sequence only after the write has finished.
             pb_power_test_boot_autostart_request();
-            pb_power_test_log_event(5, 0);
             pbsys_storage_deinit();
             while (pbio_busy_count_busy()) {
                 pbio_os_run_processes_and_wait_for_event();
             }
-            pb_power_test_log_event(6, 0);
+            pb_power_test_log_begin_sleep_sequence();
             pb_power_test_supervisor_sleep();
         }
     }

@@ -7,6 +7,7 @@
 void pb_power_test_idle_enter(void);
 void pb_power_test_idle_exit(void);
 void pb_power_test_log_event(uint16_t event, uint16_t data);
+void pb_power_test_log_begin_sleep_sequence(void);
 bool pb_power_test_boot_autostart_check(void);
 void pb_power_test_boot_autostart_request(void);
 void pb_power_test_boot_autostart_clear(void);
