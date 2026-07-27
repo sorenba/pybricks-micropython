@@ -317,14 +317,11 @@ mp_obj_t pb_power_test_active(void) {
     pb_power_test_dict_store(electronics, MP_QSTR_dma1_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA1EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_dma2_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA2EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_spi1_clock_enabled, mp_obj_new_bool((RCC->APB2ENR & RCC_APB2ENR_SPI1EN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_spi3_clock_enabled, mp_obj_new_bool((RCC->APB1ENR1 & RCC_APB1ENR1_SPI3EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_usart1_clock_enabled, mp_obj_new_bool((RCC->APB2ENR & RCC_APB2ENR_USART1EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_usart2_clock_enabled, mp_obj_new_bool((RCC->APB1ENR1 & RCC_APB1ENR1_USART2EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_usart3_clock_enabled, mp_obj_new_bool((RCC->APB1ENR1 & RCC_APB1ENR1_USART3EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_tim1_clock_enabled, mp_obj_new_bool((RCC->APB2ENR & RCC_APB2ENR_TIM1EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_tim2_clock_enabled, mp_obj_new_bool((RCC->APB1ENR1 & RCC_APB1ENR1_TIM2EN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_rtc_enabled, mp_obj_new_bool((RCC->BDCR & RCC_BDCR_RTCEN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_debug_sleep_enabled, mp_obj_new_bool((DBGMCU->CR & DBGMCU_CR_DBG_SLEEP) != 0));
     pb_power_test_dict_store(report, MP_QSTR_electronics, electronics);
 
     return report;
