@@ -20,13 +20,13 @@ run_build() {
         echo "$label complete."
         rm -f "$log_file"
         return 0
+    else
+        local status=$?
+        echo "$label failed with exit code $status. Full output:"
+        cat "$log_file"
+        rm -f "$log_file"
+        return "$status"
     fi
-
-    local status=$?
-    echo "$label failed with exit code $status. Full output:"
-    cat "$log_file"
-    rm -f "$log_file"
-    return "$status"
 }
 
 run_build "Building mpy-cross" make mpy-cross -j4

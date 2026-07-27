@@ -31,20 +31,6 @@ typedef struct {
     uint32_t count;
 } pb_power_test_samples_t;
 
-typedef struct {
-    uint32_t magic;
-    uint32_t version;
-    uint32_t before_voltage_sum;
-    uint32_t before_current_sum;
-    uint32_t before_voltage_min_max;
-    uint32_t before_current_min_max;
-    uint32_t before_sample_count;
-    uint32_t requested_seconds;
-    uint32_t checksum;
-} pb_power_test_backup_t;
-
-#define PB_POWER_TEST_BACKUP_MAGIC 0x50575431U
-#define PB_POWER_TEST_BACKUP_VERSION 1U
 #define PB_POWER_TEST_SETTLE_MS 500U
 #define PB_POWER_TEST_SAMPLE_MS 500U
 #define PB_POWER_TEST_ACTIVE_MS 10000U
@@ -236,35 +222,6 @@ mp_obj_t pb_power_test_active(void) {
     pb_power_test_dict_store(report, MP_QSTR_electronics, electronics);
 
     return report;
-}
-
-static uint32_t pb_power_test_backup_checksum(const pb_power_test_backup_t *backup) {
-    const uint32_t *values = (const uint32_t *)backup;
-    uint32_t checksum = 0x6D2B79F5U;
-    for (size_t i = 0; i < sizeof(*backup) / sizeof(uint32_t) - 1; i++) {
-        checksum = (checksum << 5) | (checksum >> 27);
-        checksum ^= values[i];
-    }
-    return checksum;
-}
-
-static void pb_power_test_backup_write(const pb_power_test_backup_t *backup) {
-    const uint32_t *values = (const uint32_t *)backup;
-    for (size_t i = 0; i < sizeof(*backup) / sizeof(uint32_t); i++) {
-        (&RTC->BKP0R)[i] = values[i];
-    }
-}
-
-static bool pb_power_test_backup_read(pb_power_test_backup_t *backup) {
-    uint32_t *values = (uint32_t *)backup;
-    for (size_t i = 0; i < sizeof(*backup) / sizeof(uint32_t); i++) {
-        values[i] = (&RTC->BKP0R)[i];
-    }
-    return backup->magic == PB_POWER_TEST_BACKUP_MAGIC && backup->version == PB_POWER_TEST_BACKUP_VERSION && backup->checksum == pb_power_test_backup_checksum(backup);
-}
-
-static void pb_power_test_backup_clear(void) {
-    RTC->BKP0R = 0;
 }
 
 static void pb_power_test_rtc_enable_backup_access(void) {
