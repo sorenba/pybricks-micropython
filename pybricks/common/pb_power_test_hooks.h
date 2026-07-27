@@ -6,6 +6,8 @@
 void pb_power_test_idle_enter(void);
 void pb_power_test_idle_exit(void);
 bool pb_power_test_boot_autostart_check(void);
+void pb_power_test_boot_autostart_confirm(void);
+void pb_power_test_boot_autostart_failed(void);
 bool pb_power_test_supervisor_sleep_requested(void);
 void pb_power_test_supervisor_sleep(void);
 

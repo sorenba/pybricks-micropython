@@ -87,17 +87,36 @@ void pbsys_main(void) {
     pbio_init();
     pbsys_init();
 
-    if (pb_power_test_boot_autostart_check()) {
-        pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
+    bool power_test_boot_autostart = pb_power_test_boot_autostart_check();
+
+    if (power_test_boot_autostart) {
+        pbio_error_t err = pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
+        if (err == PBIO_SUCCESS) {
+            pb_power_test_boot_autostart_confirm();
+        } else {
+            // Keep the wake marker intact and show a solid red diagnostic.
+            // A manual power cycle leaves the marker available for inspection.
+            for (;;) {
+                pb_power_test_boot_autostart_failed();
+                pbio_os_run_processes_and_wait_for_event();
+            }
+        }
     }
 
     // Keep loading and running user programs until shutdown is requested.
     for (;;) {
 
-        // Drives all processes while waiting for user input. This completes
-        // when a user program request is made using the buttons or by a
-        // connected host. It is cancelled on shutdown request or idle timeout.
-        pbio_error_t err = pbsys_hmi_await_program_selection();
+        pbio_error_t err = PBIO_SUCCESS;
+
+        // A validated RTC autostart request is already ready to run. Skip the
+        // normal HMI/advertising state machine so it cannot replace or delay
+        // the boot request.
+        if (!pbsys_main_program_start_is_requested()) {
+            // Drives all processes while waiting for user input. This completes
+            // when a user program request is made using the buttons or by a
+            // connected host. It is cancelled on shutdown request or idle timeout.
+            err = pbsys_hmi_await_program_selection();
+        }
         if (err != PBIO_SUCCESS) {
             // Shutdown requested or idle for a long time.
             break;

@@ -248,7 +248,6 @@ bool pb_power_test_boot_autostart_check(void) {
         return false;
     }
 
-    RTC->BKP0R = 0;
     pb_power_test_autostarted = true;
     return true;
 }
@@ -257,6 +256,16 @@ static void pb_power_test_set_status_light(pbio_color_t color) {
     if (pbsys_status_light_main) {
         pbio_color_light_on(pbsys_status_light_main, color);
     }
+}
+
+void pb_power_test_boot_autostart_confirm(void) {
+    pb_power_test_rtc_enable_backup_access();
+    RTC->BKP0R = 0;
+    pb_power_test_set_status_light(PBIO_COLOR_ORANGE);
+}
+
+void pb_power_test_boot_autostart_failed(void) {
+    pb_power_test_set_status_light(PBIO_COLOR_RED);
 }
 
 bool pb_power_test_supervisor_sleep_requested(void) {
