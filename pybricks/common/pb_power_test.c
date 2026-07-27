@@ -357,6 +357,7 @@ mp_obj_t pb_power_test_standby_result(void) {
 mp_obj_t pb_power_test_standby(void) {
     pb_power_test_rtc_enable_backup_access();
 
+    pb_power_test_backup_t backup;
     pb_power_test_samples_t voltage;
     pb_power_test_samples_t current;
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
