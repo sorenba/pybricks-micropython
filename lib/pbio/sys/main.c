@@ -92,7 +92,7 @@ void pbsys_main(void) {
     if (power_test_boot_autostart) {
         // Clear and persist the one-shot marker before starting the program so
         // a later reset cannot create an autostart loop.
-        pbsys_storage_power_test_autostart_clear();
+        pb_power_test_boot_autostart_clear();
         pbsys_storage_deinit();
         while (pbio_busy_count_busy()) {
             pbio_os_run_processes_and_wait_for_event();
@@ -174,7 +174,7 @@ void pbsys_main(void) {
         if (pb_power_test_supervisor_sleep_requested()) {
             // Save both the current slot and the one-shot autostart request in
             // external flash before the Stop 2 wake reset.
-            pbsys_storage_power_test_autostart_request();
+            pb_power_test_boot_autostart_request();
             pbsys_storage_deinit();
             while (pbio_busy_count_busy()) {
                 pbio_os_run_processes_and_wait_for_event();

@@ -57,10 +57,6 @@ typedef struct {
      */
     pbsys_storage_settings_t settings;
     /**
-     * One-shot request to automatically start slot 0 after the Stop 2 RTC reset.
-     */
-    uint32_t power_test_autostart_magic;
-    /**
      * Size and offset info for each slot.
      */
     pbsys_storage_slot_info_t slot_info[PBSYS_CONFIG_STORAGE_NUM_SLOTS];

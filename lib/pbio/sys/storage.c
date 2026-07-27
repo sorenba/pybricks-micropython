@@ -117,22 +117,6 @@ void pbsys_storage_request_write(void) {
     data_map_write_on_shutdown = true;
 }
 
-#define PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
-
-bool pbsys_storage_power_test_autostart_is_requested(void) {
-    return map->power_test_autostart_magic == PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC;
-}
-
-void pbsys_storage_power_test_autostart_request(void) {
-    map->power_test_autostart_magic = PBSYS_STORAGE_POWER_TEST_AUTOSTART_MAGIC;
-    pbsys_storage_request_write();
-}
-
-void pbsys_storage_power_test_autostart_clear(void) {
-    map->power_test_autostart_magic = 0;
-    pbsys_storage_request_write();
-}
-
 /**
  * Erases user data, erases user program meta data and restores user settings
  * to default. Does not actually erase program data, but it becomes
@@ -402,13 +386,31 @@ static pbio_error_t pbsys_storage_deinit_process_thread(pbio_os_state_t *state, 
 /**
  * Starts loading the user data from storage to RAM.
  */
+static bool pbsys_storage_data_map_is_valid(void) {
+    uint32_t used_size = 0;
+    uint32_t maximum_size = pbdrv_block_device_get_writable_size() - sizeof(pbsys_storage_data_map_t);
+
+    for (uint8_t slot = 0; slot < PBSYS_CONFIG_STORAGE_NUM_SLOTS; slot++) {
+        if (map->slot_info[slot].offset > maximum_size || map->slot_info[slot].size > maximum_size - map->slot_info[slot].offset) {
+            return false;
+        }
+        used_size += map->slot_info[slot].size;
+        if (used_size > maximum_size) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void pbsys_storage_init(void) {
 
     pbio_error_t err = pbdrv_block_device_get_data(&map);
 
     // Test that storage successfully loaded and matches current firmware,
-    // otherwise reset storage.
-    if (err != PBIO_SUCCESS || strncmp(map->stored_firmware_hash, pbsys_main_get_application_version_hash(), sizeof(map->stored_firmware_hash))) {
+    // otherwise reset storage. The map validation also migrates away from the
+    // temporary power-test layout used by v25/v26.
+    if (err != PBIO_SUCCESS || strncmp(map->stored_firmware_hash, pbsys_main_get_application_version_hash(), sizeof(map->stored_firmware_hash)) || !pbsys_storage_data_map_is_valid()) {
         pbsys_storage_reset_storage();
     }
 

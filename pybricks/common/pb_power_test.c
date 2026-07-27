@@ -19,7 +19,6 @@
 #include <pbsys/program_stop.h>
 #include <pbsys/storage.h>
 #include "../../lib/pbio/sys/program_stop.h"
-#include "../../lib/pbio/sys/storage.h"
 
 #include <pbio/color.h>
 #include <pbio/light.h>
@@ -237,17 +236,45 @@ static void pb_power_test_rtc_enable_backup_access(void) {
     }
 }
 
+#define PB_POWER_TEST_AUTOSTART_MAGIC 0x5057414BU
+#define PB_POWER_TEST_AUTOSTART_OFFSET (PBSYS_CONFIG_STORAGE_USER_DATA_SIZE - 8U)
+
+typedef struct {
+    uint32_t magic;
+    uint32_t magic_inverse;
+} pb_power_test_autostart_marker_t;
+
 static bool pb_power_test_autostarted;
 static bool pb_power_test_supervisor_sleep_pending;
 static volatile bool pb_power_test_rtc_wake_armed;
 
 bool pb_power_test_boot_autostart_check(void) {
-    if (!pbsys_storage_power_test_autostart_is_requested()) {
+    uint8_t *data;
+    if (pbsys_storage_get_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, &data, sizeof(pb_power_test_autostart_marker_t)) != PBIO_SUCCESS) {
+        return false;
+    }
+
+    pb_power_test_autostart_marker_t marker;
+    memcpy(&marker, data, sizeof(marker));
+    if (marker.magic != PB_POWER_TEST_AUTOSTART_MAGIC || marker.magic_inverse != ~PB_POWER_TEST_AUTOSTART_MAGIC) {
         return false;
     }
 
     pb_power_test_autostarted = true;
     return true;
+}
+
+void pb_power_test_boot_autostart_request(void) {
+    pb_power_test_autostart_marker_t marker = {
+        .magic = PB_POWER_TEST_AUTOSTART_MAGIC,
+        .magic_inverse = ~PB_POWER_TEST_AUTOSTART_MAGIC,
+    };
+    pbsys_storage_set_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, (const uint8_t *)&marker, sizeof(marker));
+}
+
+void pb_power_test_boot_autostart_clear(void) {
+    pb_power_test_autostart_marker_t marker = { 0 };
+    pbsys_storage_set_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, (const uint8_t *)&marker, sizeof(marker));
 }
 
 static void pb_power_test_set_status_light(pbio_color_t color) {

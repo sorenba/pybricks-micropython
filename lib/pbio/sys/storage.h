@@ -4,7 +4,6 @@
 #ifndef _PBSYS_SYS_STORAGE_H_
 #define _PBSYS_SYS_STORAGE_H_
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include <pbio/error.h>
@@ -20,9 +19,6 @@ void pbsys_storage_poll(void);
 pbio_error_t pbsys_storage_set_program_size(uint32_t size);
 pbio_error_t pbsys_storage_set_program_data(uint32_t offset, const void *data, uint32_t size);
 void pbsys_storage_get_program_data(pbsys_main_program_t *program);
-bool pbsys_storage_power_test_autostart_is_requested(void);
-void pbsys_storage_power_test_autostart_request(void);
-void pbsys_storage_power_test_autostart_clear(void);
 pbsys_storage_settings_t *pbsys_storage_settings_get_settings(void);
 
 #else
@@ -40,13 +36,6 @@ static inline pbio_error_t pbsys_storage_set_program_size(uint32_t size) {
 }
 static inline pbio_error_t pbsys_storage_set_program_data(uint32_t offset, const void *data, uint32_t size) {
     return PBIO_ERROR_NOT_SUPPORTED;
-}
-static inline bool pbsys_storage_power_test_autostart_is_requested(void) {
-    return false;
-}
-static inline void pbsys_storage_power_test_autostart_request(void) {
-}
-static inline void pbsys_storage_power_test_autostart_clear(void) {
 }
 static inline void pbsys_storage_get_program_data(pbsys_main_program_t *program) {
     program->code_start = NULL;
