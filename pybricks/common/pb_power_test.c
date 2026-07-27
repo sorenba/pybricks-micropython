@@ -74,6 +74,8 @@ static void pb_power_test_log_clear(void) {
         return;
     }
 
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+
     FLASH_EraseInitTypeDef erase_init = {
         .Banks = FLASH_BANK_1,
         .Page = (PB_POWER_TEST_LOG_ADDRESS - FLASH_BASE) / FLASH_PAGE_SIZE,
@@ -113,6 +115,8 @@ void pb_power_test_log_event(uint16_t event, uint16_t data) {
     if (HAL_FLASH_Unlock() != HAL_OK) {
         return;
     }
+
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 
     uint32_t irq = __get_PRIMASK();
     __disable_irq();
@@ -481,6 +485,7 @@ void pb_power_test_supervisor_sleep(void) {
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
     NVIC_SetPriority(RTC_WKUP_IRQn, 0);
     pb_power_test_rtc_wake_armed = true;
+    __enable_irq();
     NVIC_EnableIRQ(RTC_WKUP_IRQn);
 
     PWR->SCR = PWR_SCR_CWUF;
