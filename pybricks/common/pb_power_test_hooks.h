@@ -12,6 +12,7 @@ bool pb_power_test_boot_autostart_check(void);
 void pb_power_test_boot_autostart_request(void);
 void pb_power_test_boot_autostart_clear(void);
 void pb_power_test_boot_autostart_confirm(void);
+void pb_power_test_boot_autostart_confirm_silent(void);
 void pb_power_test_boot_autostart_failed(void);
 bool pb_power_test_supervisor_sleep_requested(void);
 void pb_power_test_supervisor_sleep(void);

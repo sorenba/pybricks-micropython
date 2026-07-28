@@ -21,6 +21,7 @@
 #include <pbsys/program_stop.h>
 #include <pbsys/storage.h>
 #include "../../lib/pbio/sys/program_stop.h"
+#include "../../lib/pbio/sys/light.h"
 
 #include <pbio/color.h>
 #include <pbio/light.h>
@@ -354,6 +355,10 @@ void pb_power_test_boot_autostart_confirm(void) {
     pb_power_test_set_status_light(PBIO_COLOR_ORANGE);
 }
 
+void pb_power_test_boot_autostart_confirm_silent(void) {
+    pb_power_test_log_event(22, 0);
+}
+
 void pb_power_test_boot_autostart_failed(void) {
     pb_power_test_log_event(23, 0);
     pb_power_test_set_status_light(PBIO_COLOR_RED);
@@ -455,13 +460,39 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     pb_power_test_log_event(13, RTC->ISR);
 }
 
+static bool pb_power_test_restore_system_clock(void) {
+    MODIFY_REG(FLASH->ACR, FLASH_ACR_LATENCY, FLASH_ACR_LATENCY_4WS);
+    if ((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_4WS) {
+        return false;
+    }
+
+    RCC->CR |= RCC_CR_MSION;
+    while (!(RCC->CR & RCC_CR_MSIRDY)) {
+    }
+
+    RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR & RCC_CR_PLLRDY)) {
+    }
+
+    MODIFY_REG(RCC->CFGR, RCC_CFGR_HPRE | RCC_CFGR_PPRE1 | RCC_CFGR_PPRE2 | RCC_CFGR_SW, RCC_CFGR_PPRE1_DIV16 | RCC_CFGR_SW_PLL);
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL) {
+    }
+
+    SystemCoreClock = 80000000U;
+    return true;
+}
+
 void pb_power_test_supervisor_sleep(void) {
     uint32_t irq_enable[8];
     uint32_t primask = __get_PRIMASK();
     uint32_t sleep_control = SCB->SCR;
+    uint32_t systick_load = SysTick->LOAD;
+    uint32_t systick_ctrl = SysTick->CTRL;
+    uint32_t systick_priority = NVIC_GetPriority(SysTick_IRQn);
 
     pbdrv_watchdog_prepare_for_stop();
-    pb_power_test_set_status_light(PBIO_COLOR_BLACK);
+    pbsys_status_light_force_off();
     SysTick->CTRL = 0;
 
     for (size_t i = 0; i < 8; i++) {
@@ -497,10 +528,17 @@ void pb_power_test_supervisor_sleep(void) {
     SCB->SCR = sleep_control;
     PWR->CR1 &= ~PWR_CR1_LPMS;
 
-    // Stop 2 wakes on MSI. Reapply the normal Technic Hub PLL and bus clock
-    // configuration without resetting the MCU or reinitializing PBIO state.
-    SystemInit();
-    pbdrv_watchdog_restore_after_stop();
+    // Stop 2 wakes on MSI. Restore the retained Technic Hub PLL directly,
+    // then restore the exact SysTick configuration that was active before sleep.
+    bool clock_restored = pb_power_test_restore_system_clock();
+    SysTick->LOAD = systick_load;
+    SysTick->VAL = 0;
+    NVIC_SetPriority(SysTick_IRQn, systick_priority);
+    SysTick->CTRL = systick_ctrl;
+
+    // Keep the watchdog on the extended timeout during reset-free recovery.
+    // The normal watchdog process continues refreshing it after wake.
+    pbdrv_watchdog_update();
 
     NVIC_DisableIRQ(RTC_WKUP_IRQn);
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
@@ -511,8 +549,8 @@ void pb_power_test_supervisor_sleep(void) {
 
     pb_power_test_autostarted = true;
     pb_power_test_log_event(26, pb_power_test_rtc_wake_source);
-    pb_power_test_log_event(27, SystemCoreClock);
-    pb_power_test_log_event(28, SysTick->CTRL);
+    pb_power_test_log_event(27, clock_restored ? SystemCoreClock : 0);
+    pb_power_test_log_event(28, SysTick->LOAD);
     __set_PRIMASK(primask);
 }
 

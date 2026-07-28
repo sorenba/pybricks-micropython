@@ -25,12 +25,6 @@ void pbdrv_watchdog_update(void);
  */
 void pbdrv_watchdog_prepare_for_stop(void);
 
-/**
- * Restores the normal watchdog timeout after returning from a deliberate
- * low-power interval without resetting the MCU.
- */
-void pbdrv_watchdog_restore_after_stop(void);
-
 #else // PBDRV_CONFIG_WATCHDOG
 
 static inline void pbdrv_watchdog_update(void) {
@@ -39,8 +33,6 @@ static inline void pbdrv_watchdog_update(void) {
 static inline void pbdrv_watchdog_prepare_for_stop(void) {
 }
 
-static inline void pbdrv_watchdog_restore_after_stop(void) {
-}
 
 #endif // PBDRV_CONFIG_WATCHDOG
 

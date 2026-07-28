@@ -187,7 +187,7 @@ void pbsys_main(void) {
             // immediately, then clear and persist the reset fallback marker.
             pbio_error_t wake_err = pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
             if (wake_err == PBIO_SUCCESS) {
-                pb_power_test_boot_autostart_confirm();
+                pb_power_test_boot_autostart_confirm_silent();
                 pb_power_test_boot_autostart_clear();
                 pb_power_test_log_event(29, 0);
                 pbsys_storage_deinit();

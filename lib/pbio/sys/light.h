@@ -11,10 +11,12 @@
 void pbsys_status_light_init(void);
 void pbsys_status_light_handle_status_change(void);
 void pbsys_status_light_poll(void);
+void pbsys_status_light_force_off(void);
 #else
 #define pbsys_status_light_init()
 #define pbsys_status_light_handle_status_change()
 #define pbsys_status_light_poll()
+#define pbsys_status_light_force_off()
 #endif
 
 #endif // _PBSYS_SYS_LIGHT_H_

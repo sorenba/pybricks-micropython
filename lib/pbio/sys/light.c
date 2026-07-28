@@ -365,6 +365,19 @@ static void pbsys_status_light_set_pattern_or_user_color(pbsys_status_light_t *i
     }
 }
 
+void pbsys_status_light_force_off(void) {
+    pbio_color_hsv_t off = { };
+
+    if (pbsys_status_light_instance_main.led) {
+        pbdrv_led_set_hsv(pbsys_status_light_instance_main.led, &off);
+    }
+    #if PBSYS_CONFIG_STATUS_LIGHT_BLUETOOTH
+    if (pbsys_status_light_instance_usb_ble.led) {
+        pbdrv_led_set_hsv(pbsys_status_light_instance_usb_ble.led, &off);
+    }
+    #endif
+}
+
 void pbsys_status_light_poll(void) {
 
     pbio_color_t new_warning_color = pbsys_status_light_pattern_next(

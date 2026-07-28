@@ -36,19 +36,5 @@ void pbdrv_watchdog_prepare_for_stop(void) {
     IWDG->KR = 0xaaaa; // start the extended interval from a full counter
 }
 
-void pbdrv_watchdog_restore_after_stop(void) {
-    IWDG->KR = 0x5555; // enable register access
-    IWDG->PR = IWDG_PR_PR_2; // divide by 64
-    #if defined(STM32F0)
-    IWDG->RLR = 1875; // 40 kHz / 64 / 1875 = 0.33... Hz => 3 second timeout
-    #elif defined(STM32F4) || defined(STM32L4) || defined(STM32H5)
-    IWDG->RLR = 1500; // 32 kHz / 64 / 1500 = 0.33... Hz => 3 second timeout
-    #else
-    #error "Unsupported MCU"
-    #endif
-    while (IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) {
-    }
-    IWDG->KR = 0xaaaa; // refresh counter using the restored timeout
-}
 
 #endif // PBDRV_CONFIG_WATCHDOG_STM32
