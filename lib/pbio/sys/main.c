@@ -178,11 +178,11 @@ void pbsys_main(void) {
             // erases the diagnostic page, so rebuild the complete pre-sleep
             // checkpoint sequence only after the write has finished.
             pb_power_test_boot_autostart_request();
+            pb_power_test_supervisor_prepare_sleep();
             pbsys_storage_deinit();
             while (pbio_busy_count_busy()) {
                 pbio_os_run_processes_and_wait_for_event();
             }
-            pb_power_test_log_begin_sleep_sequence();
             pb_power_test_supervisor_sleep();
         }
     }

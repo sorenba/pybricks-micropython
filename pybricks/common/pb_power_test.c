@@ -44,14 +44,14 @@ typedef struct {
 #define PB_POWER_TEST_STANDBY_SECONDS 5U
 
 
-#define PB_POWER_TEST_LOG_MAGIC 0xA55AU
-#define PB_POWER_TEST_LOG_ERASED 0xFFFFU
+#define PB_POWER_TEST_LOG_OFFSET 0U
+#define PB_POWER_TEST_LOG_SIZE 120U
+#define PB_POWER_TEST_LOG_CAPACITY 15U
 
 typedef struct {
-    uint16_t magic;
     uint16_t sequence;
     uint16_t event;
-    uint16_t data;
+    uint32_t data;
 } pb_power_test_log_record_t;
 
 #define PB_POWER_TEST_RESET_CHECKPOINT_MAGIC 0x52544357U
@@ -63,90 +63,46 @@ typedef struct {
 } pb_power_test_reset_checkpoint_t;
 
 static pb_power_test_reset_checkpoint_t pb_power_test_reset_checkpoint __attribute__((section(".noinit"), used));
-static uint16_t pb_power_test_log_next_index;
-static bool pb_power_test_log_index_initialized;
-
-extern uint8_t _pb_power_test_log_start[];
-
-#define PB_POWER_TEST_LOG_ADDRESS ((uint32_t)_pb_power_test_log_start)
-#define PB_POWER_TEST_LOG_CAPACITY (2048U / sizeof(pb_power_test_log_record_t))
 
 static void pb_power_test_log_clear(void) {
-    if (HAL_FLASH_Unlock() != HAL_OK) {
+    uint8_t clear[PB_POWER_TEST_LOG_SIZE] = { 0 };
+    pbsys_storage_set_user_data(PB_POWER_TEST_LOG_OFFSET, clear, sizeof(clear));
+}
+
+void pb_power_test_log_event(uint16_t event, uint32_t data) {
+    uint8_t *bytes;
+    if (pbsys_storage_get_user_data(PB_POWER_TEST_LOG_OFFSET, &bytes, PB_POWER_TEST_LOG_SIZE) != PBIO_SUCCESS) {
         return;
     }
 
-    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
-
-    FLASH_EraseInitTypeDef erase_init = {
-        .Banks = FLASH_BANK_1,
-        .Page = (PB_POWER_TEST_LOG_ADDRESS - FLASH_BASE) / FLASH_PAGE_SIZE,
-        .NbPages = 1,
-        .TypeErase = FLASH_TYPEERASE_PAGES,
-    };
-
-    uint32_t irq = __get_PRIMASK();
-    __disable_irq();
-    uint32_t page_error;
-    HAL_FLASHEx_Erase(&erase_init, &page_error);
-    __set_PRIMASK(irq);
-    HAL_FLASH_Lock();
-    pb_power_test_log_next_index = 0;
-    pb_power_test_log_index_initialized = true;
-}
-
-void pb_power_test_log_event(uint16_t event, uint16_t data) {
-    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)PB_POWER_TEST_LOG_ADDRESS;
-    uint32_t capacity = PB_POWER_TEST_LOG_CAPACITY;
-
-    if (!pb_power_test_log_index_initialized) {
-        while (pb_power_test_log_next_index < capacity && records[pb_power_test_log_next_index].magic != PB_POWER_TEST_LOG_ERASED) {
-            pb_power_test_log_next_index++;
-        }
-        pb_power_test_log_index_initialized = true;
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)bytes;
+    uint32_t index = 0;
+    while (index < PB_POWER_TEST_LOG_CAPACITY && records[index].sequence != 0) {
+        index++;
     }
-
-    uint32_t index = pb_power_test_log_next_index;
-    if (index == capacity) {
+    if (index == PB_POWER_TEST_LOG_CAPACITY) {
         return;
     }
 
     pb_power_test_log_record_t record = {
-        .magic = PB_POWER_TEST_LOG_MAGIC,
         .sequence = index + 1,
         .event = event,
         .data = data,
     };
-    uint64_t value;
-    memcpy(&value, &record, sizeof(value));
-
-    if (HAL_FLASH_Unlock() != HAL_OK) {
-        return;
-    }
-
-    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
-
-    uint32_t irq = __get_PRIMASK();
-    __disable_irq();
-    HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, PB_POWER_TEST_LOG_ADDRESS + index * sizeof(record), value);
-    __set_PRIMASK(irq);
-    HAL_FLASH_Lock();
-    if (status == HAL_OK) {
-        pb_power_test_log_next_index++;
-    }
+    pbsys_storage_set_user_data(PB_POWER_TEST_LOG_OFFSET + index * sizeof(record), (const uint8_t *)&record, sizeof(record));
 }
 
 mp_obj_t pb_power_test_log(void) {
-    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)PB_POWER_TEST_LOG_ADDRESS;
-    uint32_t capacity = PB_POWER_TEST_LOG_CAPACITY;
+    uint8_t *bytes;
     mp_obj_t list = mp_obj_new_list(0, NULL);
+    if (pbsys_storage_get_user_data(PB_POWER_TEST_LOG_OFFSET, &bytes, PB_POWER_TEST_LOG_SIZE) != PBIO_SUCCESS) {
+        return list;
+    }
 
-    for (uint32_t i = 0; i < capacity; i++) {
-        if (records[i].magic == PB_POWER_TEST_LOG_ERASED) {
+    const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)bytes;
+    for (uint32_t i = 0; i < PB_POWER_TEST_LOG_CAPACITY; i++) {
+        if (records[i].sequence == 0) {
             break;
-        }
-        if (records[i].magic != PB_POWER_TEST_LOG_MAGIC) {
-            continue;
         }
         mp_obj_t items[] = {
             mp_obj_new_int_from_uint(records[i].sequence),
@@ -382,7 +338,6 @@ void pb_power_test_boot_autostart_request(void) {
 }
 
 void pb_power_test_boot_autostart_clear(void) {
-    pb_power_test_log_event(20, 0);
     pb_power_test_autostart_marker_t marker = { 0 };
     pbsys_storage_set_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, (const uint8_t *)&marker, sizeof(marker));
 }
@@ -427,10 +382,9 @@ void RTC_WKUP_IRQHandler(void) {
     }
 }
 
-void pb_power_test_supervisor_sleep(void) {
-    pb_power_test_log_event(7, 0);
+void pb_power_test_supervisor_prepare_sleep(void) {
     pb_power_test_supervisor_sleep_pending = false;
-    pb_power_test_log_event(8, 0);
+
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
     (void)RCC->APB1ENR1;
     PWR->CR1 |= PWR_CR1_DBP;
@@ -471,17 +425,34 @@ void pb_power_test_supervisor_sleep(void) {
     RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_2;
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
     RTC->WPR = 0xFF;
-    pb_power_test_log_event(9, 0);
 
     EXTI->EMR1 &= ~EXTI_EMR1_EM20;
     EXTI->RTSR1 |= EXTI_RTSR1_RT20;
     EXTI->PR1 = EXTI_PR1_PIF20;
     EXTI->IMR1 |= EXTI_IMR1_IM20;
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+    NVIC_SetPriority(RTC_WKUP_IRQn, 0);
+    pb_power_test_rtc_wake_armed = true;
+    NVIC_EnableIRQ(RTC_WKUP_IRQn);
 
+    pb_power_test_log_clear();
+    pb_power_test_log_event(1, PB_POWER_TEST_STANDBY_SECONDS);
+    pb_power_test_log_event(2, RCC->CSR);
+    pb_power_test_log_event(3, RCC->BDCR);
+    pb_power_test_log_event(4, RTC->CR);
+    pb_power_test_log_event(5, RTC->ISR);
+    pb_power_test_log_event(6, RTC->PRER);
+    pb_power_test_log_event(7, RTC->WUTR);
+    pb_power_test_log_event(8, EXTI->IMR1);
+    pb_power_test_log_event(9, EXTI->RTSR1);
+    pb_power_test_log_event(10, ((uint32_t)RTC_WKUP_IRQn << 16) | (NVIC_GetPendingIRQ(RTC_WKUP_IRQn) << 1) | NVIC_GetEnableIRQ(RTC_WKUP_IRQn));
+    pb_power_test_log_event(11, PWR->CR1);
+    pb_power_test_log_event(12, 0xA55A0001U);
+}
+
+void pb_power_test_supervisor_sleep(void) {
     pbdrv_watchdog_prepare_for_stop();
-    pb_power_test_log_event(10, 0);
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
-    pb_power_test_log_event(11, 0);
     SysTick->CTRL = 0;
 
     for (size_t i = 0; i < 8; i++) {
@@ -497,8 +468,6 @@ void pb_power_test_supervisor_sleep(void) {
     PWR->SCR = PWR_SCR_CWUF;
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-
-    pb_power_test_log_event(12, 0);
 
     for (;;) {
         __DSB();
@@ -528,16 +497,6 @@ mp_obj_t pb_power_test_standby_result(void) {
     pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
     pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(PB_POWER_TEST_STANDBY_SECONDS));
     return report;
-}
-
-void pb_power_test_log_begin_sleep_sequence(void) {
-    pb_power_test_log_clear();
-    pb_power_test_log_event(1, 0);
-    pb_power_test_log_event(2, 0);
-    pb_power_test_log_event(3, 0);
-    pb_power_test_log_event(4, 0);
-    pb_power_test_log_event(5, 0);
-    pb_power_test_log_event(6, 0);
 }
 
 mp_obj_t pb_power_test_standby(void) {
