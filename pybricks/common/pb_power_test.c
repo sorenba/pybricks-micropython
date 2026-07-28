@@ -500,10 +500,7 @@ void pb_power_test_supervisor_sleep(void) {
     // Stop 2 wakes on MSI. Reapply the normal Technic Hub PLL and bus clock
     // configuration without resetting the MCU or reinitializing PBIO state.
     SystemInit();
-    pbdrv_watchdog_init();
-    while (IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) {
-    }
-    pbdrv_watchdog_update();
+    pbdrv_watchdog_restore_after_stop();
 
     NVIC_DisableIRQ(RTC_WKUP_IRQn);
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
