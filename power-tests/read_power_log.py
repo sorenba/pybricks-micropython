@@ -21,6 +21,8 @@ event_names = {
     17: "AUTOSTART_CHECK_BEGIN",
     18: "AUTOSTART_MARKER_MISSING",
     19: "AUTOSTART_MARKER_FOUND",
+    20: "RTC_DOMAIN_REINITIALIZED",
+    21: "RTC_WAKE_FLAG_CLEARED",
     22: "SLOT0_START_ACCEPTED",
     23: "SLOT0_START_FAILED",
     24: "RESET_CHECKPOINT_RECOVERED",
@@ -36,7 +38,7 @@ else:
     for sequence, event, data_hex in records:
         name = event_names.get(event, "UNKNOWN_EVENT")
         data_small = int(data_hex, 16) if data_hex[:1] == "0" else None
-        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21):
             print(sequence, name, "0x" + data_hex)
         elif event == 18 and data_small is not None:
             detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)

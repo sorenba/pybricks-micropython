@@ -286,8 +286,6 @@ mp_obj_t pb_power_test_active(void) {
     pb_power_test_dict_store(electronics, MP_QSTR_gpiob_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_GPIOBEN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_gpioc_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_GPIOCEN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_adc_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_ADCEN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_dma1_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA1EN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_dma2_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA2EN) != 0));
     pb_power_test_dict_store(report, MP_QSTR_electronics, electronics);
 
     return report;
@@ -304,6 +302,23 @@ typedef struct {
 static bool pb_power_test_autostarted;
 static bool pb_power_test_supervisor_sleep_pending;
 static volatile bool pb_power_test_rtc_wake_armed;
+
+static void pb_power_test_rtc_disable_wakeup(void) {
+    RTC->WPR = 0xCA;
+    RTC->WPR = 0x53;
+    RTC->CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
+    while (!(RTC->ISR & RTC_ISR_WUTWF)) {
+    }
+    do {
+        RTC->ISR &= ~RTC_ISR_WUTF;
+        __DSB();
+        __ISB();
+    } while (RTC->ISR & RTC_ISR_WUTF);
+    RTC->WPR = 0xFF;
+
+    EXTI->PR1 = EXTI_PR1_PIF20;
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+}
 
 bool pb_power_test_boot_autostart_check(void) {
     if (pb_power_test_reset_checkpoint.magic == PB_POWER_TEST_RESET_CHECKPOINT_MAGIC) {
@@ -365,12 +380,7 @@ bool pb_power_test_supervisor_sleep_requested(void) {
 void RTC_WKUP_IRQHandler(void) {
     bool wake_timer_elapsed = pb_power_test_rtc_wake_armed && (RTC->ISR & RTC_ISR_WUTF);
 
-    RTC->WPR = 0xCA;
-    RTC->WPR = 0x53;
-    RTC->ISR &= ~RTC_ISR_WUTF;
-    RTC->WPR = 0xFF;
-    EXTI->PR1 = EXTI_PR1_PIF20;
-    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+    pb_power_test_rtc_disable_wakeup();
 
     if (wake_timer_elapsed) {
         pb_power_test_rtc_wake_armed = false;
@@ -395,19 +405,22 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     while (!(RCC->CSR & RCC_CSR_LSIRDY)) {
     }
 
-    if (!(RCC->BDCR & RCC_BDCR_RTCEN)) {
-        RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1;
-        RCC->BDCR |= RCC_BDCR_RTCEN;
+    // Start every test from a newly reset RTC backup domain. The RTC and its
+    // wake timer survive a system reset, so reusing the previous run's state
+    // made repeated Stop 2 tests intermittently fail.
+    RCC->BDCR |= RCC_BDCR_BDRST;
+    RCC->BDCR &= ~RCC_BDCR_BDRST;
+    RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1;
+    RCC->BDCR |= RCC_BDCR_RTCEN;
 
-        RTC->WPR = 0xCA;
-        RTC->WPR = 0x53;
-        RTC->ISR |= RTC_ISR_INIT;
-        while (!(RTC->ISR & RTC_ISR_INITF)) {
-        }
-        RTC->PRER = (127U << RTC_PRER_PREDIV_A_Pos) | (249U << RTC_PRER_PREDIV_S_Pos);
-        RTC->ISR &= ~RTC_ISR_INIT;
-        RTC->WPR = 0xFF;
+    RTC->WPR = 0xCA;
+    RTC->WPR = 0x53;
+    RTC->ISR |= RTC_ISR_INIT;
+    while (!(RTC->ISR & RTC_ISR_INITF)) {
     }
+    RTC->PRER = (127U << RTC_PRER_PREDIV_A_Pos) | (249U << RTC_PRER_PREDIV_S_Pos);
+    RTC->ISR &= ~RTC_ISR_INIT;
+    RTC->WPR = 0xFF;
 
     pb_power_test_rtc_wake_armed = false;
     NVIC_DisableIRQ(RTC_WKUP_IRQn);
@@ -420,7 +433,11 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     RTC->CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
     while (!(RTC->ISR & RTC_ISR_WUTWF)) {
     }
-    RTC->ISR &= ~RTC_ISR_WUTF;
+    do {
+        RTC->ISR &= ~RTC_ISR_WUTF;
+        __DSB();
+        __ISB();
+    } while (RTC->ISR & RTC_ISR_WUTF);
     RTC->WUTR = PB_POWER_TEST_STANDBY_SECONDS - 1U;
     RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_2;
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
@@ -439,6 +456,8 @@ void pb_power_test_supervisor_prepare_sleep(void) {
 
     pb_power_test_log_clear();
     pb_power_test_log_event(1, PB_POWER_TEST_STANDBY_SECONDS);
+    pb_power_test_log_event(20, RCC->BDCR);
+    pb_power_test_log_event(21, RTC->ISR);
     pb_power_test_log_event(2, RCC->CSR);
     pb_power_test_log_event(3, RCC->BDCR);
     pb_power_test_log_event(4, RTC->CR);
@@ -478,6 +497,7 @@ void pb_power_test_supervisor_sleep(void) {
         __WFI();
 
         if (RTC->ISR & RTC_ISR_WUTF) {
+            pb_power_test_rtc_disable_wakeup();
             pb_power_test_reset_checkpoint.magic = PB_POWER_TEST_RESET_CHECKPOINT_MAGIC;
             pb_power_test_reset_checkpoint.event = 14;
             pb_power_test_reset_checkpoint.data = 1;
