@@ -15,6 +15,7 @@ event_names = {
     10: "RTC_NVIC_STATE",
     11: "PWR_CR1",
     12: "RTC_ARMED_SNAPSHOT_SAVED",
+    13: "RTC_ENABLE_CONFIRMED",
     14: "RTC_WAKE_FLAG_VALID",
     16: "BOOT_SYSTEM_INITIALIZED",
     17: "AUTOSTART_CHECK_BEGIN",
@@ -35,7 +36,7 @@ else:
     for sequence, event, data_hex in records:
         name = event_names.get(event, "UNKNOWN_EVENT")
         data_small = int(data_hex, 16) if data_hex[:1] == "0" else None
-        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
+        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
             print(sequence, name, "0x" + data_hex)
         elif event == 18 and data_small is not None:
             detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)

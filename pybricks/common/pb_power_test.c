@@ -288,7 +288,6 @@ mp_obj_t pb_power_test_active(void) {
     pb_power_test_dict_store(electronics, MP_QSTR_adc_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_ADCEN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_dma1_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA1EN) != 0));
     pb_power_test_dict_store(electronics, MP_QSTR_dma2_clock_enabled, mp_obj_new_bool((RCC->AHB1ENR & RCC_AHB1ENR_DMA2EN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_spi1_clock_enabled, mp_obj_new_bool((RCC->APB2ENR & RCC_APB2ENR_SPI1EN) != 0));
     pb_power_test_dict_store(report, MP_QSTR_electronics, electronics);
 
     return report;
@@ -425,6 +424,8 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     RTC->WUTR = PB_POWER_TEST_STANDBY_SECONDS - 1U;
     RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_2;
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
+    while (RTC->ISR & RTC_ISR_WUTWF) {
+    }
     RTC->WPR = 0xFF;
 
     EXTI->EMR1 &= ~EXTI_EMR1_EM20;
@@ -449,6 +450,7 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     pb_power_test_log_event(10, ((uint32_t)RTC_WKUP_IRQn << 16) | (NVIC_GetPendingIRQ(RTC_WKUP_IRQn) << 1) | NVIC_GetEnableIRQ(RTC_WKUP_IRQn));
     pb_power_test_log_event(11, PWR->CR1);
     pb_power_test_log_event(12, 0xA55A0001U);
+    pb_power_test_log_event(13, RTC->ISR);
 }
 
 void pb_power_test_supervisor_sleep(void) {
