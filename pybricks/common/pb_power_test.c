@@ -63,6 +63,8 @@ typedef struct {
 } pb_power_test_reset_checkpoint_t;
 
 static pb_power_test_reset_checkpoint_t pb_power_test_reset_checkpoint __attribute__((section(".noinit"), used));
+static uint16_t pb_power_test_log_next_index;
+static bool pb_power_test_log_index_initialized;
 
 extern uint8_t _pb_power_test_log_start[];
 
@@ -89,16 +91,22 @@ static void pb_power_test_log_clear(void) {
     HAL_FLASHEx_Erase(&erase_init, &page_error);
     __set_PRIMASK(irq);
     HAL_FLASH_Lock();
+    pb_power_test_log_next_index = 0;
+    pb_power_test_log_index_initialized = true;
 }
 
 void pb_power_test_log_event(uint16_t event, uint16_t data) {
     const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)PB_POWER_TEST_LOG_ADDRESS;
     uint32_t capacity = PB_POWER_TEST_LOG_CAPACITY;
-    uint32_t index = 0;
 
-    while (index < capacity && records[index].magic != PB_POWER_TEST_LOG_ERASED) {
-        index++;
+    if (!pb_power_test_log_index_initialized) {
+        while (pb_power_test_log_next_index < capacity && records[pb_power_test_log_next_index].magic != PB_POWER_TEST_LOG_ERASED) {
+            pb_power_test_log_next_index++;
+        }
+        pb_power_test_log_index_initialized = true;
     }
+
+    uint32_t index = pb_power_test_log_next_index;
     if (index == capacity) {
         return;
     }
@@ -120,9 +128,12 @@ void pb_power_test_log_event(uint16_t event, uint16_t data) {
 
     uint32_t irq = __get_PRIMASK();
     __disable_irq();
-    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, PB_POWER_TEST_LOG_ADDRESS + index * sizeof(record), value);
+    HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, PB_POWER_TEST_LOG_ADDRESS + index * sizeof(record), value);
     __set_PRIMASK(irq);
     HAL_FLASH_Lock();
+    if (status == HAL_OK) {
+        pb_power_test_log_next_index++;
+    }
 }
 
 mp_obj_t pb_power_test_log(void) {
@@ -498,6 +509,14 @@ void pb_power_test_supervisor_sleep(void) {
         __DSB();
         __ISB();
         __WFI();
+
+        if (RTC->ISR & RTC_ISR_WUTF) {
+            pb_power_test_reset_checkpoint.magic = PB_POWER_TEST_RESET_CHECKPOINT_MAGIC;
+            pb_power_test_reset_checkpoint.event = 14;
+            pb_power_test_reset_checkpoint.data = 1;
+            __DSB();
+            NVIC_SystemReset();
+        }
     }
 }
 
