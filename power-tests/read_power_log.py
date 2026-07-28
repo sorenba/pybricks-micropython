@@ -29,15 +29,16 @@ if not records:
     print("Power log is empty.")
 else:
     print("Persistent power log:")
-    for sequence, event, data in records:
+    for sequence, event, data_hex in records:
         name = event_names.get(event, "UNKNOWN_EVENT")
+        data_small = int(data_hex, 16) if data_hex[:1] == "0" else None
         if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
-            print(sequence, name, "0x{:08X}".format(data))
-        elif event == 18:
-            detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data, str(data))
+            print(sequence, name, "0x" + data_hex)
+        elif event == 18 and data_small is not None:
+            detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)
             print(sequence, name, detail)
-        elif event == 24:
-            recovered = event_names.get(data, "event " + str(data))
+        elif event == 24 and data_small is not None:
+            recovered = event_names.get(data_small, "event " + str(data_small))
             print(sequence, name, recovered)
         else:
-            print(sequence, name, data)
+            print(sequence, name, data_hex)

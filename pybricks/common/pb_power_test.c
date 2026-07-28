@@ -5,6 +5,7 @@
 #if PYBRICKS_PY_COMMON && PYBRICKS_PY_COMMON_SYSTEM
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -104,10 +105,12 @@ mp_obj_t pb_power_test_log(void) {
         if (records[i].sequence == 0) {
             break;
         }
+        char data_hex[9];
+        snprintf(data_hex, sizeof(data_hex), "%08lX", (unsigned long)records[i].data);
         mp_obj_t items[] = {
             mp_obj_new_int_from_uint(records[i].sequence),
             mp_obj_new_int_from_uint(records[i].event),
-            mp_obj_new_int_from_uint(records[i].data),
+            mp_obj_new_str(data_hex, 8),
         };
         mp_obj_list_append(list, mp_obj_new_tuple(MP_ARRAY_SIZE(items), items));
     }
