@@ -11,6 +11,7 @@ if wake_report is not None:
     hub.light.on(Color.YELLOW)
     print("Stop 2 RTC wake completed and stored program autostarted.")
     print(wake_report)
+    wait(5000)
 else:
     motor = Motor(Port.A)
 

@@ -91,17 +91,17 @@ void pbsys_main(void) {
     bool power_test_boot_autostart = pb_power_test_boot_autostart_check();
 
     if (power_test_boot_autostart) {
-        // Clear and persist the one-shot marker before starting the program so
-        // a later reset cannot create an autostart loop.
-        pb_power_test_boot_autostart_clear();
-        pbsys_storage_deinit();
-        while (pbio_busy_count_busy()) {
-            pbio_os_run_processes_and_wait_for_event();
-        }
-
         pbio_error_t err = pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
         if (err == PBIO_SUCCESS) {
             pb_power_test_boot_autostart_confirm();
+
+            // Clear and persist the one-shot marker together with the accepted
+            // start checkpoint so a later reset cannot create an autostart loop.
+            pb_power_test_boot_autostart_clear();
+            pbsys_storage_deinit();
+            while (pbio_busy_count_busy()) {
+                pbio_os_run_processes_and_wait_for_event();
+            }
         } else {
             // Keep the wake marker intact and show a solid red diagnostic.
             // A manual power cycle leaves the marker available for inspection.

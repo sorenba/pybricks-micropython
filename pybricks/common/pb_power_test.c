@@ -47,11 +47,10 @@ typedef struct {
 
 #define PB_POWER_TEST_LOG_OFFSET 0U
 #define PB_POWER_TEST_LOG_SIZE 120U
-#define PB_POWER_TEST_LOG_CAPACITY 15U
+#define PB_POWER_TEST_LOG_CAPACITY 24U
 
-typedef struct {
-    uint16_t sequence;
-    uint16_t event;
+typedef struct __attribute__((packed)) {
+    uint8_t event;
     uint32_t data;
 } pb_power_test_log_record_t;
 
@@ -78,7 +77,7 @@ void pb_power_test_log_event(uint16_t event, uint32_t data) {
 
     const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)bytes;
     uint32_t index = 0;
-    while (index < PB_POWER_TEST_LOG_CAPACITY && records[index].sequence != 0) {
+    while (index < PB_POWER_TEST_LOG_CAPACITY && records[index].event != 0) {
         index++;
     }
     if (index == PB_POWER_TEST_LOG_CAPACITY) {
@@ -86,7 +85,6 @@ void pb_power_test_log_event(uint16_t event, uint32_t data) {
     }
 
     pb_power_test_log_record_t record = {
-        .sequence = index + 1,
         .event = event,
         .data = data,
     };
@@ -102,13 +100,13 @@ mp_obj_t pb_power_test_log(void) {
 
     const pb_power_test_log_record_t *records = (const pb_power_test_log_record_t *)bytes;
     for (uint32_t i = 0; i < PB_POWER_TEST_LOG_CAPACITY; i++) {
-        if (records[i].sequence == 0) {
+        if (records[i].event == 0) {
             break;
         }
         char data_hex[9];
         snprintf(data_hex, sizeof(data_hex), "%08lX", (unsigned long)records[i].data);
         mp_obj_t items[] = {
-            mp_obj_new_int_from_uint(records[i].sequence),
+            mp_obj_new_int_from_uint(i + 1),
             mp_obj_new_int_from_uint(records[i].event),
             mp_obj_new_str(data_hex, 8),
         };
@@ -493,6 +491,7 @@ mp_obj_t pb_power_test_standby_result(void) {
     }
 
     pb_power_test_autostarted = false;
+    pb_power_test_log_event(25, 0);
     pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 
     mp_obj_t report = mp_obj_new_dict(0);

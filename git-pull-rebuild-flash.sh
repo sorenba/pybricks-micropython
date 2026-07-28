@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-printf '\033[2J\033[H'
+clear
 
 git pull --ff-only
 bash rebuild.sh
