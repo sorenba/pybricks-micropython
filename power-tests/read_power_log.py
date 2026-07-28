@@ -27,6 +27,10 @@ event_names = {
     23: "SLOT0_START_FAILED",
     24: "RESET_CHECKPOINT_RECOVERED",
     25: "STANDBY_RESULT_CONSUMED",
+    26: "STOP2_WAKE_RETURNED",
+    27: "SYSTEM_CLOCK_RESTORED",
+    28: "SYSTICK_RESTORED",
+    29: "AUTOSTART_MARKER_CLEARED",
 }
 
 records = hub.system.power_test_log()
@@ -38,11 +42,14 @@ else:
     for sequence, event, data_hex in records:
         name = event_names.get(event, "UNKNOWN_EVENT")
         data_small = int(data_hex, 16) if data_hex[:1] == "0" else None
-        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21):
+        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 27, 28):
             print(sequence, name, "0x" + data_hex)
         elif event == 18 and data_small is not None:
             detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)
             print(sequence, name, detail)
+        elif event == 26 and data_small is not None:
+            source = {0: "RTC IRQ", 1: "post-WFI flag"}.get(data_small, data_hex)
+            print(sequence, name, source)
         elif event == 24 and data_small is not None:
             recovered = event_names.get(data_small, "event " + str(data_small))
             print(sequence, name, recovered)

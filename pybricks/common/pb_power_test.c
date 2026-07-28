@@ -54,16 +54,6 @@ typedef struct __attribute__((packed)) {
     uint32_t data;
 } pb_power_test_log_record_t;
 
-#define PB_POWER_TEST_RESET_CHECKPOINT_MAGIC 0x52544357U
-
-typedef struct {
-    uint32_t magic;
-    uint16_t event;
-    uint16_t data;
-} pb_power_test_reset_checkpoint_t;
-
-static pb_power_test_reset_checkpoint_t pb_power_test_reset_checkpoint __attribute__((section(".noinit"), used));
-
 static void pb_power_test_log_clear(void) {
     uint8_t clear[PB_POWER_TEST_LOG_SIZE] = { 0 };
     pbsys_storage_set_user_data(PB_POWER_TEST_LOG_OFFSET, clear, sizeof(clear));
@@ -282,10 +272,6 @@ mp_obj_t pb_power_test_active(void) {
     mp_obj_t electronics = mp_obj_new_dict(0);
     pb_power_test_dict_store(electronics, MP_QSTR_ble_host_connected, mp_obj_new_bool(pbsys_status_test(PBIO_PYBRICKS_STATUS_BLE_HOST_CONNECTED)));
     pb_power_test_dict_store(electronics, MP_QSTR_system_clock_hz, mp_obj_new_int_from_uint(SystemCoreClock));
-    pb_power_test_dict_store(electronics, MP_QSTR_gpioa_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_GPIOAEN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_gpiob_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_GPIOBEN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_gpioc_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_GPIOCEN) != 0));
-    pb_power_test_dict_store(electronics, MP_QSTR_adc_clock_enabled, mp_obj_new_bool((RCC->AHB2ENR & RCC_AHB2ENR_ADCEN) != 0));
     pb_power_test_dict_store(report, MP_QSTR_electronics, electronics);
 
     return report;
@@ -302,6 +288,8 @@ typedef struct {
 static bool pb_power_test_autostarted;
 static bool pb_power_test_supervisor_sleep_pending;
 static volatile bool pb_power_test_rtc_wake_armed;
+static volatile bool pb_power_test_rtc_wake_detected;
+static volatile uint32_t pb_power_test_rtc_wake_source;
 
 static void pb_power_test_rtc_disable_wakeup(void) {
     RTC->WPR = 0xCA;
@@ -316,15 +304,13 @@ static void pb_power_test_rtc_disable_wakeup(void) {
     } while (RTC->ISR & RTC_ISR_WUTF);
     RTC->WPR = 0xFF;
 
+    EXTI->IMR1 &= ~EXTI_IMR1_IM20;
+    EXTI->RTSR1 &= ~EXTI_RTSR1_RT20;
     EXTI->PR1 = EXTI_PR1_PIF20;
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
 }
 
 bool pb_power_test_boot_autostart_check(void) {
-    if (pb_power_test_reset_checkpoint.magic == PB_POWER_TEST_RESET_CHECKPOINT_MAGIC) {
-        pb_power_test_log_event(24, pb_power_test_reset_checkpoint.event);
-        pb_power_test_reset_checkpoint.magic = 0;
-    }
     pb_power_test_log_event(17, 0);
     uint8_t *data;
     if (pbsys_storage_get_user_data(PB_POWER_TEST_AUTOSTART_OFFSET, &data, sizeof(pb_power_test_autostart_marker_t)) != PBIO_SUCCESS) {
@@ -384,11 +370,8 @@ void RTC_WKUP_IRQHandler(void) {
 
     if (wake_timer_elapsed) {
         pb_power_test_rtc_wake_armed = false;
-        pb_power_test_reset_checkpoint.magic = PB_POWER_TEST_RESET_CHECKPOINT_MAGIC;
-        pb_power_test_reset_checkpoint.event = 14;
-        pb_power_test_reset_checkpoint.data = 0;
-        __DSB();
-        NVIC_SystemReset();
+        pb_power_test_rtc_wake_source = 0;
+        pb_power_test_rtc_wake_detected = true;
     }
 }
 
@@ -473,16 +456,23 @@ void pb_power_test_supervisor_prepare_sleep(void) {
 }
 
 void pb_power_test_supervisor_sleep(void) {
+    uint32_t irq_enable[8];
+    uint32_t primask = __get_PRIMASK();
+    uint32_t sleep_control = SCB->SCR;
+
     pbdrv_watchdog_prepare_for_stop();
     pb_power_test_set_status_light(PBIO_COLOR_BLACK);
     SysTick->CTRL = 0;
 
     for (size_t i = 0; i < 8; i++) {
+        irq_enable[i] = NVIC->ISER[i];
         NVIC->ICER[i] = UINT32_MAX;
         NVIC->ICPR[i] = UINT32_MAX;
     }
     NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
     NVIC_SetPriority(RTC_WKUP_IRQn, 0);
+    pb_power_test_rtc_wake_detected = false;
+    pb_power_test_rtc_wake_source = 1;
     pb_power_test_rtc_wake_armed = true;
     __enable_irq();
     NVIC_EnableIRQ(RTC_WKUP_IRQn);
@@ -491,20 +481,42 @@ void pb_power_test_supervisor_sleep(void) {
     PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_STOP2;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 
-    for (;;) {
+    while (!pb_power_test_rtc_wake_detected) {
         __DSB();
         __ISB();
         __WFI();
 
         if (RTC->ISR & RTC_ISR_WUTF) {
             pb_power_test_rtc_disable_wakeup();
-            pb_power_test_reset_checkpoint.magic = PB_POWER_TEST_RESET_CHECKPOINT_MAGIC;
-            pb_power_test_reset_checkpoint.event = 14;
-            pb_power_test_reset_checkpoint.data = 1;
-            __DSB();
-            NVIC_SystemReset();
+            pb_power_test_rtc_wake_armed = false;
+            pb_power_test_rtc_wake_detected = true;
         }
     }
+
+    __disable_irq();
+    SCB->SCR = sleep_control;
+    PWR->CR1 &= ~PWR_CR1_LPMS;
+
+    // Stop 2 wakes on MSI. Reapply the normal Technic Hub PLL and bus clock
+    // configuration without resetting the MCU or reinitializing PBIO state.
+    SystemInit();
+    pbdrv_watchdog_init();
+    while (IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) {
+    }
+    pbdrv_watchdog_update();
+
+    NVIC_DisableIRQ(RTC_WKUP_IRQn);
+    NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
+    irq_enable[(uint32_t)RTC_WKUP_IRQn >> 5] &= ~(1UL << ((uint32_t)RTC_WKUP_IRQn & 31U));
+    for (size_t i = 0; i < 8; i++) {
+        NVIC->ISER[i] = irq_enable[i];
+    }
+
+    pb_power_test_autostarted = true;
+    pb_power_test_log_event(26, pb_power_test_rtc_wake_source);
+    pb_power_test_log_event(27, SystemCoreClock);
+    pb_power_test_log_event(28, SysTick->CTRL);
+    __set_PRIMASK(primask);
 }
 
 mp_obj_t pb_power_test_standby_result(void) {
@@ -517,7 +529,7 @@ mp_obj_t pb_power_test_standby_result(void) {
     pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 
     mp_obj_t report = mp_obj_new_dict(0);
-    pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("stop2_reset_autostart", 21));
+    pb_power_test_dict_store(report, MP_QSTR_test, mp_obj_new_str("stop2_resume_autostart", 22));
     pb_power_test_dict_store(report, MP_QSTR_completed, mp_const_true);
     pb_power_test_dict_store(report, MP_QSTR_requested_seconds, mp_obj_new_int_from_uint(PB_POWER_TEST_STANDBY_SECONDS));
     return report;

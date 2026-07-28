@@ -173,10 +173,8 @@ void pbsys_main(void) {
         pbsys_main_run_program_cleanup();
 
         if (pb_power_test_supervisor_sleep_requested()) {
-            // Save both the current slot and the one-shot autostart request in
-            // external flash before the Stop 2 wake reset. This storage write
-            // erases the diagnostic page, so rebuild the complete pre-sleep
-            // checkpoint sequence only after the write has finished.
+            // Save the current slot, persistent diagnostic log, and one-shot
+            // reset fallback marker before entering Stop 2.
             pb_power_test_boot_autostart_request();
             pb_power_test_supervisor_prepare_sleep();
             pbsys_storage_deinit();
@@ -184,6 +182,25 @@ void pbsys_main(void) {
                 pbio_os_run_processes_and_wait_for_event();
             }
             pb_power_test_supervisor_sleep();
+
+            // Stop 2 returned in the same firmware session. Request slot 0
+            // immediately, then clear and persist the reset fallback marker.
+            pbio_error_t wake_err = pbsys_main_program_request_start(PBIO_PYBRICKS_USER_PROGRAM_ID_FIRST_SLOT, PBSYS_MAIN_PROGRAM_START_REQUEST_TYPE_BOOT);
+            if (wake_err == PBIO_SUCCESS) {
+                pb_power_test_boot_autostart_confirm();
+                pb_power_test_boot_autostart_clear();
+                pb_power_test_log_event(29, 0);
+                pbsys_storage_deinit();
+                while (pbio_busy_count_busy()) {
+                    pbio_os_run_processes_and_wait_for_event();
+                }
+            } else {
+                for (;;) {
+                    pb_power_test_boot_autostart_failed();
+                    pbio_os_run_processes_and_wait_for_event();
+                }
+            }
+            continue;
         }
     }
 

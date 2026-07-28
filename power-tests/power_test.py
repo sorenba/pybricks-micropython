@@ -9,7 +9,7 @@ wake_report = hub.system.power_test_standby_result()
 
 if wake_report is not None:
     hub.light.on(Color.YELLOW)
-    print("Stop 2 RTC wake completed and stored program autostarted.")
+    print("Stop 2 wake result received and slot 0 restarted.")
     print(wake_report)
     wait(5000)
 else:
