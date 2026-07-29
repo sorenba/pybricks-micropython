@@ -31,6 +31,10 @@ event_names = {
     27: "SYSTEM_CLOCK_RESTORED",
     28: "SYSTICK_RESTORED",
     29: "AUTOSTART_MARKER_CLEARED",
+    30: "BATTERY_START_SAMPLE",
+    31: "AUTONOMOUS_SLEEP_CYCLE_WAKE",
+    32: "MINIMAL_WAKE_UPPER_BOUND",
+    33: "BATTERY_END_SAMPLE",
 }
 
 records = hub.system.power_test_log()
@@ -42,7 +46,11 @@ else:
     for sequence, event, data_hex in records:
         name = event_names.get(event, "UNKNOWN_EVENT")
         data_small = int(data_hex, 16) if data_hex[:1] == "0" else None
-        if event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 27, 28):
+        if event in (30, 32, 33):
+            voltage_mv = int(data_hex[:4], 16)
+            current_ma = int(data_hex[4:], 16)
+            print(sequence, name, "voltage", voltage_mv, "mV current", current_ma, "mA")
+        elif event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 27, 28):
             print(sequence, name, "0x" + data_hex)
         elif event == 18 and data_small is not None:
             detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)

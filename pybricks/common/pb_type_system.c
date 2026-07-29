@@ -79,10 +79,11 @@ static mp_obj_t pb_type_System_power_test_active(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_active_obj, pb_type_System_power_test_active);
 
-static mp_obj_t pb_type_System_power_test_standby(void) {
-    return pb_power_test_standby();
+static mp_obj_t pb_type_System_power_test_standby(mp_obj_t cycles_in) {
+    mp_int_t cycles = mp_obj_get_int(cycles_in);
+    return pb_power_test_standby(cycles > 0 ? cycles : 1);
 }
-static MP_DEFINE_CONST_FUN_OBJ_0(pb_type_System_power_test_standby_obj, pb_type_System_power_test_standby);
+static MP_DEFINE_CONST_FUN_OBJ_1(pb_type_System_power_test_standby_obj, pb_type_System_power_test_standby);
 
 static mp_obj_t pb_type_System_power_test_standby_result(void) {
     return pb_power_test_standby_result();
