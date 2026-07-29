@@ -35,6 +35,11 @@ event_names = {
     31: "AUTONOMOUS_SLEEP_CYCLE_WAKE",
     32: "MINIMAL_WAKE_UPPER_BOUND",
     33: "BATTERY_END_SAMPLE",
+    34: "ADC_MINIMAL_WAKE_RESTORED",
+    35: "MINIMAL_WAKE_RAW_SAMPLE",
+    36: "ADC_ACTIVE_RESTORED",
+    37: "BATTERY_END_RAW_SAMPLE",
+    38: "BATTERY_START_RAW_SAMPLE",
 }
 
 records = hub.system.power_test_log()
@@ -50,7 +55,11 @@ else:
             voltage_mv = int(data_hex[:4], 16)
             current_ma = int(data_hex[4:], 16)
             print(sequence, name, "voltage", voltage_mv, "mV current", current_ma, "mA")
-        elif event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 27, 28):
+        elif event in (35, 37, 38):
+            voltage_raw = int(data_hex[:4], 16)
+            current_raw = int(data_hex[4:], 16)
+            print(sequence, name, "voltage raw", voltage_raw, "current raw", current_raw)
+        elif event in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 27, 28, 34, 36):
             print(sequence, name, "0x" + data_hex)
         elif event == 18 and data_small is not None:
             detail = {1: "user-data read failed", 2: "marker value invalid"}.get(data_small, data_hex)

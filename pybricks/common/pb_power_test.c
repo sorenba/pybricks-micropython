@@ -216,10 +216,15 @@ static uint32_t pb_power_test_standby_cycles;
 static uint32_t pb_power_test_completed_cycles;
 static uint32_t pb_power_test_start_voltage_mv;
 static uint32_t pb_power_test_start_current_ma;
+static uint32_t pb_power_test_start_voltage_raw;
+static uint32_t pb_power_test_start_current_raw;
 static uint32_t pb_power_test_end_voltage_mv;
 static uint32_t pb_power_test_end_current_ma;
+static uint32_t pb_power_test_end_voltage_raw;
+static uint32_t pb_power_test_end_current_raw;
 static uint32_t pb_power_test_upper_voltage_mv;
 static uint32_t pb_power_test_upper_current_ma;
+static uint32_t pb_power_test_upper_voltage_raw;
 static uint32_t pb_power_test_upper_current_raw;
 
 static void pb_power_test_rtc_disable_wakeup(void) {
@@ -286,10 +291,6 @@ static void pb_power_test_measure_upper_bound(void) {
     uint32_t voltage_sum = 0;
     uint32_t current_sum = 0;
     uint32_t count = 0;
-    uint32_t timer_prescaler = PBDRV_CONFIG_ADC_STM32_HAL_TIMER_INSTANCE->PSC;
-
-    PBDRV_CONFIG_ADC_STM32_HAL_TIMER_INSTANCE->PSC = 0;
-    PBDRV_CONFIG_ADC_STM32_HAL_TIMER_INSTANCE->EGR = TIM_EGR_UG;
 
     for (uint32_t i = 0; i < PB_POWER_TEST_UPPER_BOUND_SAMPLES; i++) {
         pb_power_test_wait_cpu_cycles(PB_POWER_TEST_UPPER_BOUND_CPU_CYCLES);
@@ -303,15 +304,13 @@ static void pb_power_test_measure_upper_bound(void) {
         }
     }
 
-    PBDRV_CONFIG_ADC_STM32_HAL_TIMER_INSTANCE->PSC = timer_prescaler;
-    PBDRV_CONFIG_ADC_STM32_HAL_TIMER_INSTANCE->EGR = TIM_EGR_UG;
-
     if (count) {
-        uint32_t voltage_raw = voltage_sum / count;
+        pb_power_test_upper_voltage_raw = voltage_sum / count;
         pb_power_test_upper_current_raw = current_sum / count;
         pb_power_test_upper_current_ma = pb_power_test_current_ma(pb_power_test_upper_current_raw);
-        pb_power_test_upper_voltage_mv = pb_power_test_voltage_mv(voltage_raw, pb_power_test_upper_current_raw);
+        pb_power_test_upper_voltage_mv = pb_power_test_voltage_mv(pb_power_test_upper_voltage_raw, pb_power_test_upper_current_raw);
         pb_power_test_log_event(32, (pb_power_test_upper_voltage_mv << 16) | pb_power_test_upper_current_ma);
+        pb_power_test_log_event(35, (pb_power_test_upper_voltage_raw << 16) | pb_power_test_upper_current_raw);
     }
 }
 
@@ -421,6 +420,7 @@ void pb_power_test_supervisor_prepare_sleep(void) {
     pb_power_test_log_event(20, RCC->BDCR);
     pb_power_test_log_event(21, RTC->ISR);
     pb_power_test_log_event(30, (pb_power_test_start_voltage_mv << 16) | pb_power_test_start_current_ma);
+    pb_power_test_log_event(38, (pb_power_test_start_voltage_raw << 16) | pb_power_test_start_current_raw);
     pb_power_test_log_event(13, RTC->ISR);
 }
 
@@ -456,6 +456,7 @@ void pb_power_test_supervisor_sleep(void) {
     uint32_t systick_priority = NVIC_GetPriority(SysTick_IRQn);
 
     pbdrv_watchdog_prepare_for_stop();
+    pbdrv_adc_prepare_for_stop();
     pbsys_status_light_force_off();
     SysTick->CTRL = 0;
 
@@ -497,7 +498,11 @@ void pb_power_test_supervisor_sleep(void) {
         }
 
         if (cycle == 0) {
+            SystemCoreClock = 4000000U;
+            pbdrv_adc_restore_after_stop();
+            pb_power_test_log_event(34, SystemCoreClock);
             pb_power_test_measure_upper_bound();
+            pbdrv_adc_prepare_for_stop();
         }
 
         if (pb_power_test_completed_cycles < pb_power_test_standby_cycles) {
@@ -511,6 +516,8 @@ void pb_power_test_supervisor_sleep(void) {
     // Stop 2 wakes on MSI. Restore the retained Technic Hub PLL directly,
     // then restore the exact SysTick configuration that was active before sleep.
     bool clock_restored = pb_power_test_restore_system_clock();
+    pbdrv_adc_restore_after_stop();
+    pb_power_test_log_event(36, SystemCoreClock);
     SysTick->LOAD = systick_load;
     SysTick->VAL = 0;
     NVIC_SetPriority(SysTick_IRQn, systick_priority);
@@ -546,11 +553,12 @@ mp_obj_t pb_power_test_standby_result(void) {
     pb_power_test_samples_t current;
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, PB_POWER_TEST_ACTIVE_SAMPLE_MS, &voltage, &current);
-    uint32_t voltage_raw = pb_power_test_samples_mean(&voltage);
-    uint32_t current_raw = pb_power_test_samples_mean(&current);
-    pb_power_test_end_current_ma = pb_power_test_current_ma(current_raw);
-    pb_power_test_end_voltage_mv = pb_power_test_voltage_mv(voltage_raw, current_raw);
+    pb_power_test_end_voltage_raw = pb_power_test_samples_mean(&voltage);
+    pb_power_test_end_current_raw = pb_power_test_samples_mean(&current);
+    pb_power_test_end_current_ma = pb_power_test_current_ma(pb_power_test_end_current_raw);
+    pb_power_test_end_voltage_mv = pb_power_test_voltage_mv(pb_power_test_end_voltage_raw, pb_power_test_end_current_raw);
     pb_power_test_log_event(33, (pb_power_test_end_voltage_mv << 16) | pb_power_test_end_current_ma);
+    pb_power_test_log_event(37, (pb_power_test_end_voltage_raw << 16) | pb_power_test_end_current_raw);
     pb_power_test_log_event(25, 0);
     pb_power_test_set_status_light(PBIO_COLOR_YELLOW);
 
@@ -564,6 +572,11 @@ mp_obj_t pb_power_test_standby_result(void) {
         mp_obj_new_int_from_uint(pb_power_test_end_current_ma),
         mp_obj_new_int_from_uint(pb_power_test_upper_voltage_mv),
         mp_obj_new_int_from_uint(pb_power_test_upper_current_ma),
+        mp_obj_new_int_from_uint(pb_power_test_start_voltage_raw),
+        mp_obj_new_int_from_uint(pb_power_test_start_current_raw),
+        mp_obj_new_int_from_uint(pb_power_test_end_voltage_raw),
+        mp_obj_new_int_from_uint(pb_power_test_end_current_raw),
+        mp_obj_new_int_from_uint(pb_power_test_upper_voltage_raw),
         mp_obj_new_int_from_uint(pb_power_test_upper_current_raw),
     };
     return mp_obj_new_tuple(MP_ARRAY_SIZE(items), items);
@@ -575,12 +588,15 @@ mp_obj_t pb_power_test_standby(uint32_t cycles) {
 
     pb_power_test_wait_ms(PB_POWER_TEST_SETTLE_MS);
     pb_power_test_measure(PB_POWER_TEST_SAMPLE_MS, PB_POWER_TEST_ACTIVE_SAMPLE_MS, &voltage, &current);
-    uint32_t voltage_raw = pb_power_test_samples_mean(&voltage);
-    uint32_t current_raw = pb_power_test_samples_mean(&current);
-    pb_power_test_start_current_ma = pb_power_test_current_ma(current_raw);
-    pb_power_test_start_voltage_mv = pb_power_test_voltage_mv(voltage_raw, current_raw);
+    pb_power_test_start_voltage_raw = pb_power_test_samples_mean(&voltage);
+    pb_power_test_start_current_raw = pb_power_test_samples_mean(&current);
+    pb_power_test_start_current_ma = pb_power_test_current_ma(pb_power_test_start_current_raw);
+    pb_power_test_start_voltage_mv = pb_power_test_voltage_mv(pb_power_test_start_voltage_raw, pb_power_test_start_current_raw);
+    pb_power_test_end_voltage_raw = 0;
+    pb_power_test_end_current_raw = 0;
     pb_power_test_upper_voltage_mv = 0;
     pb_power_test_upper_current_ma = 0;
+    pb_power_test_upper_voltage_raw = 0;
     pb_power_test_upper_current_raw = 0;
     pb_power_test_standby_cycles = cycles ? cycles : 1;
     pb_power_test_supervisor_sleep_pending = true;

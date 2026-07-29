@@ -10,7 +10,7 @@ hub = TechnicHub()
 wake_report = hub.system.power_test_standby_result()
 
 if wake_report is not None:
-    cycles, seconds_per_cycle, total_sleep_seconds, start_voltage_mv, start_current_ma, end_voltage_mv, end_current_ma, upper_voltage_mv, upper_current_ma, upper_current_raw = wake_report
+    cycles, seconds_per_cycle, total_sleep_seconds, start_voltage_mv, start_current_ma, end_voltage_mv, end_current_ma, upper_voltage_mv, upper_current_ma, start_voltage_raw, start_current_raw, end_voltage_raw, end_current_raw, upper_voltage_raw, upper_current_raw = wake_report
     hub.light.on(Color.YELLOW)
     print("Stop 2 battery test completed without Python between RTC wakes.")
     print("Sleep cycles:", cycles)
@@ -23,7 +23,9 @@ if wake_report is not None:
     print("Ending active current:", end_current_ma, "mA")
     print("Minimal-wake upper-bound voltage:", upper_voltage_mv, "mV")
     print("Minimal-wake upper-bound current:", upper_current_ma, "mA")
-    print("Minimal-wake raw current:", upper_current_raw)
+    print("Starting raw voltage/current:", start_voltage_raw, start_current_raw)
+    print("Ending raw voltage/current:", end_voltage_raw, end_current_raw)
+    print("Minimal-wake raw voltage/current:", upper_voltage_raw, upper_current_raw)
     wait(3000)
 else:
     # print("3. Running 10-second active idle power test...")

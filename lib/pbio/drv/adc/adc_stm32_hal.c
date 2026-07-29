@@ -25,6 +25,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <pbio/error.h>
 #include <pbio/util.h>
@@ -134,6 +135,28 @@ void pbdrv_adc_init(void) {
     HAL_NVIC_EnableIRQ(PBDRV_CONFIG_ADC_STM32_HAL_DMA_IRQ);
     HAL_ADC_Start_DMA(&pbdrv_adc_hadc, pbdrv_adc_dma_buffer, PBIO_ARRAY_SIZE(pbdrv_adc_dma_buffer));
     HAL_TIM_Base_Start(&pbdrv_adc_htim);
+}
+
+void pbdrv_adc_prepare_for_stop(void) {
+    HAL_TIM_Base_Stop(&pbdrv_adc_htim);
+    HAL_ADC_Stop_DMA(&pbdrv_adc_hadc);
+    HAL_NVIC_DisableIRQ(PBDRV_CONFIG_ADC_STM32_HAL_DMA_IRQ);
+    HAL_NVIC_ClearPendingIRQ(PBDRV_CONFIG_ADC_STM32_HAL_DMA_IRQ);
+}
+
+void pbdrv_adc_restore_after_stop(void) {
+    HAL_TIM_Base_Stop(&pbdrv_adc_htim);
+    HAL_ADC_Stop_DMA(&pbdrv_adc_hadc);
+    HAL_ADC_DeInit(&pbdrv_adc_hadc);
+    HAL_DMA_DeInit(&pbdrv_adc_hdma);
+    HAL_TIM_Base_DeInit(&pbdrv_adc_htim);
+
+    memset(&pbdrv_adc_htim, 0, sizeof(pbdrv_adc_htim));
+    memset(&pbdrv_adc_hdma, 0, sizeof(pbdrv_adc_hdma));
+    memset(&pbdrv_adc_hadc, 0, sizeof(pbdrv_adc_hadc));
+    memset(pbdrv_adc_dma_buffer, 0, sizeof(pbdrv_adc_dma_buffer));
+
+    pbdrv_adc_init();
 }
 
 #endif // PBDRV_CONFIG_ADC_STM32_HAL

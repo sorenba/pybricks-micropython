@@ -40,6 +40,18 @@ pbio_error_t pbdrv_adc_get_ch(uint8_t ch, uint16_t *value);
  */
 pbio_error_t pbdrv_adc_await_new_samples(pbio_os_state_t *state, uint32_t *start_time_us, uint32_t future_us);
 
+#if PBDRV_CONFIG_ADC_STM32_HAL
+/**
+ * Stops the STM32 ADC trigger timer and DMA before entering Stop mode.
+ */
+void pbdrv_adc_prepare_for_stop(void);
+
+/**
+ * Reinitializes the STM32 ADC trigger timer, DMA, and ADC after Stop mode.
+ */
+void pbdrv_adc_restore_after_stop(void);
+#endif
+
 #else
 
 static inline pbio_error_t pbdrv_adc_get_ch(uint8_t ch, uint16_t *value) {
